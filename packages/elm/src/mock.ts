@@ -78,7 +78,6 @@ export class MockElm extends BufferedTransport {
     const command = text.replace(/\r$/, "");
     this.written.push(command);
 
-
     if (this.latencyMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
     }

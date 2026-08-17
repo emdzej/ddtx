@@ -128,6 +128,11 @@ refused request marks every one of its fields with the NRC. A link failure marks
 them as an error. These are three different facts and the UI shows them
 differently.
 
+The bus trace shows a button's own exchanges above the refresh's, tagged `sent`.
+They are kept separately from the snapshot because a press is followed by a refresh
+that replaces it — without that, a write would be invisible under the reads that
+came after it, which is the opposite of what you need when verifying one.
+
 ### Rendering
 
 The canvas is a fixed twip plate: `pixels = twips ÷ uiScale`, one divisor for
@@ -142,7 +147,39 @@ translated caption can never be used as a lookup key.
 
 ---
 
-## 3. A click's journey
+## 3. Writing a value
+
+Inputs are editable; displays are not. Which control a field gets is the database's
+decision, not a style choice: a `lists` map means a fixed set of choices and gets a
+dropdown, anything else gets a text box — exactly the distinction the Qt app makes
+between `QComboBox` and `QLineEdit` (`input_widget.py:170`).
+
+Three rules that are easy to get wrong:
+
+**Typed values are scoped by request _and_ data name.** An input belongs to one
+request and contributes only to that request; the same data name under a different
+request is a different field. The original keys this
+`inputdict[requestName].getDataByName(dataName)`, and `InputValues` matches it.
+
+**A field with no supplied value keeps whatever `sentbytes` already holds.** Not
+laziness — the original notes that `ReadMemoryByAddress` on the S3000 depends on the
+template's own `MEMSIZE` when no input offers one (`param_widget.py:965`).
+
+**A dropdown carries the raw label, never the translation.** The write path looks
+the label up in `data.items` to recover the integer, so a translated one would
+encode the wrong byte. The option's _text_ is translated; its _value_ is not.
+
+An edited box is outlined blue, because the number on screen is then no longer the
+ECU's. A refresh will not overwrite it — losing what someone is typing to an
+auto-refresh tick would be its own kind of bug — and double-clicking reverts to the
+last read value.
+
+Every stream is built **before anything is sent**. A value that will not encode
+aborts the whole press with the offending field named and marked, because a button
+often fires several requests in order and sending the first two before discovering
+the third is malformed would leave the ECU part-way through a change.
+
+## 4. A click's journey
 
 Reading is safe. Writing is not, and a browser tab breaks three assumptions the Qt
 app relies on: it can be backgrounded (timers throttled mid-sequence), duplicated
@@ -167,7 +204,7 @@ pressable and silently doing nothing.
 
 ---
 
-## 4. Demo mode
+## 5. Demo mode
 
 `SimulatedLink` replays each request's stored `replybytes`. That data is sound —
 94.4% coverage, and its first byte is the positive-response SID in 74,513 of
@@ -191,7 +228,7 @@ the UI says so.
 
 ---
 
-## 5. Two traps that have each bitten more than once
+## 6. Two traps that have each bitten more than once
 
 **Strings are keys.** `data{}` is keyed by the French label and a widget's `text`
 is a lookup into it. Translate in place and every reference dangles. Worse, `lists`
@@ -210,7 +247,7 @@ first.
 
 ---
 
-## 6. What is verified, and how
+## 7. What is verified, and how
 
 | Layer      | How                                                                                                              |
 | ---------- | ---------------------------------------------------------------------------------------------------------------- |

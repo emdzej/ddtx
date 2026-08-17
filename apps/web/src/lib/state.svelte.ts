@@ -19,6 +19,7 @@ import {
   type EcuSummary,
   type PreparedLayout,
   type PreparedScreen,
+  type PreparedWidget,
 } from "@ddtx/db";
 import { SimulatedLink, type EcuLink, type FillMode } from "@ddtx/link";
 import {
@@ -38,7 +39,13 @@ import {
   withAdapterLock,
   type GateDecision,
 } from "@ddtx/session";
-import { ScreenRuntime, type ScreenSnapshot, testerPresentFrame } from "@ddtx/screens";
+import {
+  inputValuesFrom,
+  ScreenRuntime,
+  type Exchange,
+  type ScreenSnapshot,
+  testerPresentFrame,
+} from "@ddtx/screens";
 import type { LoadedEcu } from "@ddtx/db";
 
 export type Phase = "idle" | "loading" | "ready" | "error";
@@ -165,6 +172,32 @@ interface AppState {
    */
   linkBench: string | null;
   benching: boolean;
+
+  /**
+   * What the operator has typed, keyed `requestName\u0000dataName`.
+   *
+   * Scoped by request *and* data name because that is what the write path uses: an
+   * input belongs to one request, and the same data name under another request is a
+   * different field.
+   *
+   * Cleared when the screen changes — a value typed for one screen has no meaning
+   * on the next, and carrying it silently would be worse than losing it.
+   */
+  edits: Map<string, string>;
+  /** Data name a value could not be encoded for, so the box can be marked. */
+  badField: string | null;
+  /**
+   * Exchanges from the last button press.
+   *
+   * Kept separate from the refresh snapshot because a press is followed by a
+   * refresh, and the refresh replaces the snapshot — so without this the trace
+   * would show only the reads that came *after* the write, and what the button
+   * actually sent would be invisible. On a write that is the one thing worth
+   * seeing.
+   */
+  actionExchanges: Exchange[];
+  /** Which button produced them. */
+  actionLabel: string | null;
 }
 
 const CATALOGUE_KEY = "ddtx.catalogueOpen";
@@ -239,6 +272,10 @@ export const app = $state<AppState>({
   lastRefusal: null,
   linkBench: null,
   benching: false,
+  edits: new Map(),
+  badField: null,
+  actionExchanges: [],
+  actionLabel: null,
 });
 
 export function setCatalogueOpen(open: boolean): void {
@@ -644,6 +681,10 @@ export async function openScreen(name: string): Promise<void> {
   stopAutoRefresh();
   app.screen = screen;
   app.snapshot = null;
+  app.edits = new Map();
+  app.badField = null;
+  app.actionExchanges = [];
+  app.actionLabel = null;
 
   // With a vehicle attached the adapter has to be configured for this ECU before
   // anything is sent. Cheap to repeat: the driver short-circuits when it is
@@ -720,6 +761,45 @@ function stopAutoRefresh(): void {
   app.autoRefresh = false;
 }
 
+/** Key an edit the way the write path reads it. */
+function editKey(requestName: string, dataName: string): string {
+  return `${requestName}\u0000${dataName}`;
+}
+
+/** The value showing in an input: what was typed, else what was last read. */
+export function inputValue(widget: PreparedWidget): string {
+  const dataName = widget.dataName;
+  if (dataName === null) return "";
+  const typed = app.edits.get(editKey(widget.request, dataName));
+  if (typed !== undefined) return typed;
+  return app.snapshot?.values.get(widget.id)?.value ?? "";
+}
+
+/** Has this input been typed into since the screen opened? */
+export function isEdited(widget: PreparedWidget): boolean {
+  const dataName = widget.dataName;
+  if (dataName === null) return false;
+  return app.edits.has(editKey(widget.request, dataName));
+}
+
+export function setInputValue(widget: PreparedWidget, value: string): void {
+  const dataName = widget.dataName;
+  if (dataName === null) return;
+  // A new Map so Svelte sees the change; mutating in place would not invalidate.
+  const next = new Map(app.edits);
+  next.set(editKey(widget.request, dataName), value);
+  app.edits = next;
+  if (app.badField === dataName) app.badField = null;
+}
+
+export function revertInput(widget: PreparedWidget): void {
+  const dataName = widget.dataName;
+  if (dataName === null) return;
+  const next = new Map(app.edits);
+  next.delete(editKey(widget.request, dataName));
+  app.edits = next;
+}
+
 /**
  * Would pressing a button be allowed right now?
  *
@@ -765,18 +845,33 @@ export async function pressButton(uniquename: string): Promise<void> {
       return;
     }
 
-    const outcome = await withAdapterLock(async () => {
-      await runtime?.pressButton(button);
-    });
+    const outcome = await withAdapterLock(async () =>
+      runtime?.pressButton(button, inputValuesFrom(app.edits)),
+    );
     if (!outcome.ran) {
       app.lastRefusal =
         "Another ddtx tab is using this adapter. Close it, or disconnect there first.";
       return;
     }
+    if (outcome.value?.refused !== undefined) {
+      app.badField = outcome.value.refused.field;
+      app.lastRefusal = `“${outcome.value.refused.field}” is not a value this field accepts, so nothing was sent.`;
+      return;
+    }
+    app.actionExchanges = outcome.value?.exchanges ?? [];
+    app.actionLabel = button.text;
   } else {
-    await runtime.pressButton(button);
+    const result = await runtime.pressButton(button, inputValuesFrom(app.edits));
+    if (result.refused !== undefined) {
+      app.badField = result.refused.field;
+      app.lastRefusal = `“${result.refused.field}” is not a value this field accepts, so nothing was sent.`;
+      return;
+    }
+    app.actionExchanges = result.exchanges;
+    app.actionLabel = button.text;
   }
 
+  app.badField = null;
   app.lastRefusal = null;
   await refresh();
 }

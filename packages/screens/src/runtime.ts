@@ -25,7 +25,7 @@
  *  - a display that decodes to `null` shows as **NO DATA**, not as blank.
  */
 
-import { decodeStream, formatRequestStream, type BoundRequest } from "@ddtx/codec";
+import { buildDataStream, decodeStream, formatRequestStream, type BoundRequest } from "@ddtx/codec";
 import type { LoadedEcu, PreparedButton, PreparedScreen, PreparedWidget } from "@ddtx/db";
 import { negativeResponse, type EcuLink } from "@ddtx/link";
 
@@ -65,6 +65,42 @@ export interface Exchange {
   rejected?: { code: string; message: string };
   error?: string;
   elapsedMs: number;
+}
+
+/**
+ * Values the operator has typed, ready to be written into a request.
+ *
+ * Scoped by **request name and data name together**, matching the original's
+ * `inputdict[requestName].getDataByName(dataName)`. An input widget belongs to one
+ * request and contributes to that request only — the same data name under a
+ * different request is a different field.
+ */
+export interface InputValues {
+  get(requestName: string, dataName: string): string | undefined;
+}
+
+/** Build an {@link InputValues} from a flat map keyed `request\u0000dataName`. */
+export function inputValuesFrom(entries: ReadonlyMap<string, string>): InputValues {
+  return {
+    get: (requestName, dataName) => entries.get(`${requestName}\u0000${dataName}`),
+  };
+}
+
+/** Why a button press did not happen, when it didn't. */
+export interface ButtonRefusal {
+  requestName: string;
+  /** The data name whose value would not encode. */
+  field: string;
+}
+
+export interface ButtonResult {
+  exchanges: Exchange[];
+  /**
+   * Set when a value would not encode. **Nothing was sent** — the original aborts
+   * the whole sequence rather than sending a partly-filled frame
+   * (`param_widget.py:993`), which on a write is the only safe choice.
+   */
+  refused?: ButtonRefusal;
 }
 
 export interface ScreenRuntimeOptions {
@@ -251,20 +287,52 @@ export class ScreenRuntime {
     return { values, exchanges, elapsedMs: this.now() - started };
   }
 
-  /** Fire a button's requests in order, each after its delay. */
-  async pressButton(button: PreparedButton): Promise<Exchange[]> {
-    const exchanges: Exchange[] = [];
+  /**
+   * Fire a button's requests in order, each after its delay.
+   *
+   * With `inputs`, every request's send fields are filled from what the operator
+   * typed. Any field left unsupplied keeps the value already in `sentbytes` — see
+   * `buildDataStream`.
+   *
+   * **Every stream is built before anything is sent.** A value that will not
+   * encode aborts the whole sequence, because a button often fires several
+   * requests in order and sending the first few before discovering the third is
+   * malformed would leave the ECU part-way through a change.
+   */
+  async pressButton(button: PreparedButton, inputs?: InputValues): Promise<ButtonResult> {
+    const planned: Array<{ request: BoundRequest; delayMs: number; stream: string[] }> = [];
+
     for (const entry of button.send) {
-      await this.sleep(Number.parseFloat(entry.Delay) || 0);
       const request = this.ecu.requests.get(entry.RequestName);
       if (request === undefined) continue;
-      exchanges.push(await this.send(request));
+
+      const supplied: Record<string, string> = {};
+      if (inputs !== undefined) {
+        for (const dataName of Object.keys(request.def.sendbyte_dataitems ?? {})) {
+          const value = inputs.get(entry.RequestName, dataName);
+          if (value !== undefined) supplied[dataName] = value;
+        }
+      }
+
+      const built = buildDataStream(request, supplied);
+      if (!built.ok) {
+        return { exchanges: [], refused: { requestName: entry.RequestName, field: built.field } };
+      }
+      planned.push({ request, delayMs: Number.parseFloat(entry.Delay) || 0, stream: built.stream });
     }
-    return exchanges;
+
+    const exchanges: Exchange[] = [];
+    for (const { request, delayMs, stream } of planned) {
+      await this.sleep(delayMs);
+      exchanges.push(await this.send(request, stream));
+    }
+    return { exchanges };
   }
 
-  private async send(request: BoundRequest): Promise<Exchange> {
-    const frame = formatRequestStream((request.def.sentbytes ?? "").match(/.{1,2}/g) ?? []);
+  private async send(request: BoundRequest, stream?: readonly string[]): Promise<Exchange> {
+    const frame = formatRequestStream(
+      stream ?? (request.def.sentbytes ?? "").match(/.{1,2}/g) ?? [],
+    );
     return this.sendRaw(frame, request.def.name);
   }
 

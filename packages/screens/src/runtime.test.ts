@@ -3,7 +3,7 @@ import { resolveDataDictionary, type BoundRequest } from "@ddtx/codec";
 import type { DataDef, LayoutFileDef, RequestDef, ScreenDef } from "@ddtx/core";
 import { prepareLayout, type LoadedEcu } from "@ddtx/db";
 import type { EcuLink, RequestHint } from "@ddtx/link";
-import { NO_DATA, ScreenRuntime, testerPresentFrame } from "./runtime.js";
+import { inputValuesFrom, NO_DATA, ScreenRuntime, testerPresentFrame } from "./runtime.js";
 
 const font = { name: "Arial", size: 9, bold: "0", italic: "0" };
 const rect = { left: 0, top: 0, width: 100, height: 100 };
@@ -33,6 +33,12 @@ const requestDefs: RequestDef[] = [
     deny_sds: [],
     sentbytes: "2E0100",
     sendbyte_dataitems: { Setting: { firstbyte: 3 } },
+  },
+  {
+    name: "WriteFlag",
+    deny_sds: [],
+    sentbytes: "2E0200",
+    sendbyte_dataitems: { Flag: { firstbyte: 3 } },
   },
   { name: "Wake", deny_sds: [], sentbytes: "1003" },
 ];
@@ -301,7 +307,7 @@ describe("ScreenRuntime presend and buttons", () => {
     const link = new ScriptedLink({ Wake: "50 03", Manual: "61 01" });
     const runtime = new ScreenRuntime(makeEcu(), screen, link, { sleep: noSleep });
 
-    const exchanges = await runtime.pressButton(screen.buttons[0]!);
+    const { exchanges } = await runtime.pressButton(screen.buttons[0]!);
     expect(exchanges.map((e) => e.requestName)).toEqual(["Wake", "Manual"]);
     // The frame is the request template, spaced out as the ELM expects.
     expect(exchanges[0]?.sent).toBe("10 03");
@@ -326,5 +332,141 @@ describe("testerPresentFrame", () => {
       data: resolved,
     });
     expect(testerPresentFrame(ecu)).toBe("3E00");
+  });
+});
+
+describe("writing values from inputs", () => {
+  /** `Write` has one send field, `Setting`, at byte 3 of `2E 01 00`. */
+  function writeScreen() {
+    return prepare(
+      screenOf({
+        inputs: [widget("inputs", "Setting", "Write")],
+        buttons: [
+          {
+            rect,
+            font,
+            text: "Send",
+            messages: [],
+            uniquename: "Send_0",
+            send: [{ RequestName: "Write", Delay: "0" }],
+          },
+        ],
+      }),
+    );
+  }
+
+  function values(pairs: Record<string, string>) {
+    return inputValuesFrom(new Map(Object.entries(pairs)));
+  }
+
+  it("writes a typed value into the frame", async () => {
+    const screen = writeScreen();
+    const link = new ScriptedLink({ Write: "6E 01 00" });
+    const runtime = new ScreenRuntime(makeEcu(), screen, link, { sleep: noSleep });
+
+    const { exchanges } = await runtime.pressButton(
+      screen.buttons[0]!,
+      values({ "Write\u0000Setting": "AB" }),
+    );
+    // Byte 3 of the template replaced; the first two bytes are untouched.
+    expect(exchanges[0]?.sent).toBe("2E 01 AB");
+  });
+
+  it("keeps the template's own value when no input supplies one", async () => {
+    // Required, not lazy: the original notes ReadMemoryByAddress depends on it.
+    const screen = writeScreen();
+    const link = new ScriptedLink({ Write: "6E 01 00" });
+    const runtime = new ScreenRuntime(makeEcu(), screen, link, { sleep: noSleep });
+
+    const { exchanges } = await runtime.pressButton(screen.buttons[0]!, values({}));
+    expect(exchanges[0]?.sent).toBe("2E 01 00");
+  });
+
+  it("scopes a value to its own request, not to the data name alone", async () => {
+    // `Setting` under a different request must not pick this value up.
+    const screen = writeScreen();
+    const link = new ScriptedLink({ Write: "6E 01 00" });
+    const runtime = new ScreenRuntime(makeEcu(), screen, link, { sleep: noSleep });
+
+    const { exchanges } = await runtime.pressButton(
+      screen.buttons[0]!,
+      values({ "SomeOtherRequest\u0000Setting": "AB" }),
+    );
+    expect(exchanges[0]?.sent).toBe("2E 01 00");
+  });
+
+  it("refuses the whole press when a value will not encode, sending nothing", async () => {
+    const screen = writeScreen();
+    const link = new ScriptedLink({ Write: "6E 01 00" });
+    const runtime = new ScreenRuntime(makeEcu(), screen, link, { sleep: noSleep });
+
+    const result = await runtime.pressButton(
+      screen.buttons[0]!,
+      values({ "Write\u0000Setting": "not hex" }),
+    );
+    expect(result.refused).toEqual({ requestName: "Write", field: "Setting" });
+    expect(result.exchanges).toEqual([]);
+    expect(link.sent).toEqual([]);
+  });
+
+  it("aborts before the first request when a later one is malformed", async () => {
+    // A button firing several requests must not half-apply a change.
+    const screen = prepare(
+      screenOf({
+        inputs: [widget("inputs", "Setting", "Write")],
+        buttons: [
+          {
+            rect,
+            font,
+            text: "Two",
+            messages: [],
+            uniquename: "Two_0",
+            send: [
+              { RequestName: "Wake", Delay: "0" },
+              { RequestName: "Write", Delay: "0" },
+            ],
+          },
+        ],
+      }),
+    );
+    const link = new ScriptedLink({ Wake: "50 03", Write: "6E 01 00" });
+    const runtime = new ScreenRuntime(makeEcu(), screen, link, { sleep: noSleep });
+
+    const result = await runtime.pressButton(
+      screen.buttons[0]!,
+      values({ "Write\u0000Setting": "ZZ" }),
+    );
+    expect(result.refused?.field).toBe("Setting");
+    // "Wake" is first and perfectly valid, and must still not have been sent.
+    expect(link.sent).toEqual([]);
+  });
+
+  it("converts an enum label back to its integer", async () => {
+    // The write path looks the label up to recover the value, which is why the UI
+    // must carry the untranslated label or the integer itself.
+    const screen = prepare(
+      screenOf({
+        inputs: [widget("inputs", "Flag", "WriteFlag")],
+        buttons: [
+          {
+            rect,
+            font,
+            text: "Set",
+            messages: [],
+            uniquename: "Set_0",
+            send: [{ RequestName: "WriteFlag", Delay: "0" }],
+          },
+        ],
+      }),
+    );
+    const link = new ScriptedLink({ WriteFlag: "6E 02 00" });
+    const runtime = new ScreenRuntime(makeEcu(), screen, link, { sleep: noSleep });
+
+    const { exchanges } = await runtime.pressButton(
+      screen.buttons[0]!,
+      values({ "WriteFlag\u0000Flag": "ON" }),
+    );
+    // "ON" is 1 in the enum, so byte 3 becomes 01 — not the ASCII of "ON".
+    expect(exchanges[0]?.sent).toBe("2E 02 01");
   });
 });

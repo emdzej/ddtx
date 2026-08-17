@@ -48,19 +48,32 @@ export function formatSentBytes(sentbytes: string | undefined): string[] {
   return chunkHex(sentbytes ?? "");
 }
 
+/** What `buildDataStream` produced, or which field stopped it. */
+export type BuiltStream =
+  | { ok: true; stream: string[] }
+  /**
+   * `field` is the data name that would not encode — the caller needs it to mark
+   * the offending box, since "the request failed" is not actionable on a screen
+   * with a dozen inputs.
+   */
+  | { ok: false; field: string };
+
 /**
  * Build the outgoing byte array, applying each supplied input to its field.
  *
- * `inputs` is keyed by data name. A value that matches one of the field's enum
- * labels is converted back to its raw integer first — which is why the UI must
- * hand back the untranslated label or, better, the integer itself.
+ * `inputs` is keyed by data name. **A field with no supplied value keeps whatever
+ * `sentbytes` already holds** — that is not laziness, it is required: the original
+ * notes `ReadMemoryByAddress` on the S3000 depends on the template's own `MEMSIZE`
+ * when no input widget offers one (`param_widget.py:965`).
  *
- * Returns `null` if any field failed to encode, matching `setValue`.
+ * A value matching one of the field's enum labels is converted back to its raw
+ * integer first, which is why the UI must hand back the untranslated label — or,
+ * better, the integer.
  */
 export function buildDataStream(
   request: BoundRequest,
   inputs: Record<string, string | string[]> = {},
-): string[] | null {
+): BuiltStream {
   const stream = formatSentBytes(request.def.sentbytes);
   const sendItems = request.def.sendbyte_dataitems ?? {};
 
@@ -85,10 +98,12 @@ export function buildDataStream(
       if (raw !== undefined) value = raw.toString(16).toUpperCase();
     }
 
-    if (setValue(data, item, request.endianness, value, stream) === null) return null;
+    if (setValue(data, item, request.endianness, value, stream) === null) {
+      return { ok: false, field: name };
+    }
   }
 
-  return stream;
+  return { ok: true, stream };
 }
 
 /** The hex text to send, e.g. `"31 A0 01"`. */

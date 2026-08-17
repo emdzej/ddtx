@@ -9,12 +9,25 @@
 <script lang="ts">
   import type { ScreenSnapshot } from "@ddtx/screens";
   import { app, setTraceOpen, t } from "../lib/state.svelte.js";
+  import type { Exchange } from "@ddtx/screens";
 
   interface Props {
     snapshot: ScreenSnapshot | null;
   }
 
   const { snapshot }: Props = $props();
+
+  /**
+   * A button's exchanges first, then the refresh's.
+   *
+   * The press happens before the refresh that follows it, so this is chronological
+   * — and it means a write is visible rather than buried under the reads that came
+   * after it.
+   */
+  const rows = $derived<Array<{ exchange: Exchange; fromAction: boolean }>>([
+    ...app.actionExchanges.map((exchange) => ({ exchange, fromAction: true })),
+    ...(snapshot?.exchanges ?? []).map((exchange) => ({ exchange, fromAction: false })),
+  ]);
 </script>
 
 <section class="trace" class:open={app.traceOpen}>
@@ -28,7 +41,10 @@
     <span class="caret" aria-hidden="true">{app.traceOpen ? "▾" : "▸"}</span>
     <span class="eyebrow">Bus trace</span>
     {#if snapshot !== null}
-      <span class="hex">{snapshot.exchanges.length} exchanges · {snapshot.elapsedMs} ms</span>
+      <span class="hex">
+        {rows.length} exchanges · {snapshot.elapsedMs} ms
+        {#if app.actionExchanges.length > 0}· incl. {app.actionLabel}{/if}
+      </span>
     {/if}
   </button>
 
@@ -38,9 +54,19 @@
     <p class="empty">Open a screen to see its requests.</p>
   {:else}
     <ol>
-      {#each snapshot.exchanges as exchange, i (i)}
-        <li class:rejected={exchange.rejected !== undefined} class:failed={exchange.error !== undefined}>
-          <span class="name" title={exchange.requestName}>{t("request", exchange.requestName)}</span>
+      {#each rows as row, i (i)}
+        {@const exchange = row.exchange}
+        <li
+          class:rejected={exchange.rejected !== undefined}
+          class:failed={exchange.error !== undefined}
+          class:action={row.fromAction}
+        >
+          <span class="name" title={exchange.requestName}>
+            {#if row.fromAction}<span class="tag">sent</span>{/if}{t(
+              "request",
+              exchange.requestName,
+            )}
+          </span>
           <span class="frames">
             <span class="dir">→</span><span class="hex">{exchange.sent}</span>
             <span class="dir">←</span><span class="hex">{exchange.received || "—"}</span>
@@ -149,6 +175,24 @@
   li.failed {
     box-shadow: inset 3px 0 0 var(--red);
     background: color-mix(in srgb, var(--red) 7%, transparent);
+  }
+
+  /* A button's own exchanges, distinguished from the refresh's reads. */
+  li.action {
+    box-shadow: inset 3px 0 0 var(--blue);
+  }
+
+  .tag {
+    display: inline-block;
+    margin-right: 5px;
+    padding: 0 4px;
+    background: var(--blue);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    vertical-align: 1px;
   }
 
   .empty {

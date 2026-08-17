@@ -27,7 +27,18 @@
     widgetParts,
   } from "@ddtx/screens";
   import type { ScreenSnapshot } from "@ddtx/screens";
-  import { app, buttonGate, currentEcu, pressButton, t, untranslated } from "../lib/state.svelte.js";
+  import {
+    app,
+    buttonGate,
+    currentEcu,
+    inputValue,
+    isEdited,
+    pressButton,
+    revertInput,
+    setInputValue,
+    t,
+    untranslated,
+  } from "../lib/state.svelte.js";
 
   interface Props {
     screen: PreparedScreen;
@@ -83,6 +94,32 @@
     return t("list", value);
   }
 
+  /**
+   * The enum a field accepts, or `null` for a free-text field.
+   *
+   * The database decides: a `lists` map means a fixed set of choices, and the Qt
+   * app renders exactly that distinction — `QComboBox` when `data.items` is
+   * non-empty, `QLineEdit` otherwise (`input_widget.py:170`).
+   */
+  function choicesFor(dataName: string | null): Array<{ raw: number; label: string }> | null {
+    if (dataName === null) return null;
+    const data = currentEcu()?.data.get(dataName);
+    if (data === undefined || data.lists.size === 0) return null;
+    return [...data.lists.entries()]
+      .map(([raw, label]) => ({ raw, label }))
+      .sort((a, b) => a.raw - b.raw);
+  }
+
+  /** What a free-text field expects, so the placeholder is not a guess. */
+  function hintFor(dataName: string | null): string {
+    if (dataName === null) return "";
+    const data = currentEcu()?.data.get(dataName);
+    if (data === undefined) return "";
+    if (data.bytesascii) return `text, ${data.bytescount} chars`;
+    if (data.scaled) return data.unit === "" ? "decimal" : `decimal ${data.unit}`;
+    return `hex, ${data.bytescount} byte${data.bytescount === 1 ? "" : "s"}`;
+  }
+
   function tooltip(dataName: string | null, request: string): string {
     if (dataName === null) return `${request} — no value bound`;
     const data = currentEcu()?.data.get(dataName);
@@ -133,18 +170,57 @@
             class:gap={untranslated("data", widget.label)}
             style={css(parts.caption)}>{t("data", widget.label)}</span
           >
-          <span
-            class="value"
-            class:input={widget.kind === "input"}
-            class:nodata={value?.status === "no-data"}
-            class:rejected={value?.status === "rejected"}
-            class:failed={value?.status === "error"}
-            style={css(parts.value)}
-          >
-            {#if value?.value !== null && value?.value !== undefined}
-              {valueText(widget.dataName, value.value)}{unitFor(widget.dataName)}
+          {#if widget.kind === "input"}
+            {@const choices = choicesFor(widget.dataName)}
+            <!--
+              Always editable, even with writing off. Typing is local state and
+              sends nothing; the gate that matters is on the button, where bytes
+              actually leave. Disabling these would stop you inspecting what a
+              field expects without first arming the write path, which is friction
+              for no safety.
+            -->
+            {#if choices !== null}
+              <select
+                class="value input"
+                class:edited={isEdited(widget)}
+                class:bad={app.badField === widget.dataName}
+                style={css(parts.value)}
+                title={tooltip(widget.dataName, widget.request)}
+                value={inputValue(widget)}
+                onchange={(event) => setInputValue(widget, event.currentTarget.value)}
+              >
+                <!-- The option's value is the raw label, never the translation:
+                     the write path looks it back up to recover the integer. -->
+                {#each choices as choice (choice.raw)}
+                  <option value={choice.label}>{t("list", choice.label)}</option>
+                {/each}
+              </select>
+            {:else}
+              <input
+                class="value input"
+                class:edited={isEdited(widget)}
+                class:bad={app.badField === widget.dataName}
+                style={css(parts.value)}
+                placeholder={hintFor(widget.dataName)}
+                title={`${tooltip(widget.dataName, widget.request)}\n\nDouble-click to go back to the value read from the ECU.`}
+                value={inputValue(widget)}
+                oninput={(event) => setInputValue(widget, event.currentTarget.value)}
+                ondblclick={() => revertInput(widget)}
+              />
             {/if}
-          </span>
+          {:else}
+            <span
+              class="value"
+              class:nodata={value?.status === "no-data"}
+              class:rejected={value?.status === "rejected"}
+              class:failed={value?.status === "error"}
+              style={css(parts.value)}
+            >
+              {#if value?.value !== null && value?.value !== undefined}
+                {valueText(widget.dataName, value.value)}{unitFor(widget.dataName)}
+              {/if}
+            </span>
+          {/if}
         </div>
       {/each}
 
@@ -285,10 +361,28 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Writable fields read as wells rather than readouts, and inherit the widget's
+     font so an edited screen still looks like the screen it was drawn as. */
   .value.input {
-    /* Writable fields read as wells rather than readouts. */
-    background: rgba(255, 255, 255, 0.72);
+    background: rgba(255, 255, 255, 0.82);
     text-align: left;
+    font: inherit;
+    color: inherit;
+    border-radius: 0;
+    padding: 0 2px;
+    min-width: 0;
+  }
+
+  /* Typed-in but not yet sent: the value on screen is no longer the ECU's. */
+  .value.input.edited {
+    background: #fff;
+    box-shadow: inset 0 0 0 1px var(--blue);
+  }
+
+  /* Refused by the codec, so nothing was sent. */
+  .value.input.bad {
+    background: #fff;
+    box-shadow: inset 0 0 0 2px var(--red);
   }
 
   /* Three failure shades, all red, distinguished by weight rather than by hue —
