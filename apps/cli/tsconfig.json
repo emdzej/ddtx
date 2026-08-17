@@ -4,15 +4,34 @@
     "composite": true,
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*"
+  ],
   "references": [
-    { "path": "../../packages/core" },
-    { "path": "../../packages/codec" },
-    { "path": "../../packages/db" },
-    { "path": "../../packages/link" },
-    { "path": "../../packages/screens" },
-    { "path": "../../packages/elm" }
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/codec"
+    },
+    {
+      "path": "../../packages/db"
+    },
+    {
+      "path": "../../packages/link"
+    },
+    {
+      "path": "../../packages/screens"
+    },
+    {
+      "path": "../../packages/elm"
+    },
+    {
+      "path": "../../packages/session"
+    }
   ]
 }

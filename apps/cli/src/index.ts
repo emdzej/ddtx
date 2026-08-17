@@ -23,6 +23,7 @@ import {
 import { EcuDatabase, type DbSource, type LoadedEcu } from "@ddtx/db";
 import { requiredResponseBytes } from "@ddtx/link";
 import { ScreenRuntime } from "@ddtx/screens";
+import { attachEcu, describeAttachment } from "@ddtx/session";
 import { listPorts, looksLikeAdapter, NodeSerialTransport } from "./nodeSerial.js";
 import { formatStats, latencyFloorHint, measure, STATS_HEADER } from "./bench.js";
 
@@ -404,25 +405,8 @@ async function cmdRead(args: Args): Promise<void> {
     await driver.identify();
 
     // Address the ECU the way its own definition says to.
-    const protocol = protocolName;
-    if (protocol === "CAN") {
-      await driver.initCan();
-      await driver.setCanAddress({
-        idTx: ecu.def.obd.send_id ?? "7E0",
-        idRx: ecu.def.obd.recv_id ?? "7E8",
-        ecuname: ecu.def.ecuname,
-        ...(ecu.def.obd.baudrate === undefined ? {} : { baudrate: ecu.def.obd.baudrate }),
-      });
-    } else if (protocol === "ISO8") {
-      await driver.initIso();
-      await driver.setIso8Address(ecu.def.obd.funcaddr);
-    } else {
-      await driver.initIso();
-      // `fastinit: false` in the database means the ECU wants slow init.
-      await driver.setIsoAddress(ecu.def.obd.funcaddr, {
-        slowInit: ecu.def.obd.fastinit === false,
-      });
-    }
+    const attachment = await attachEcu(driver, ecu);
+    process.stdout.write(`attached: ${describeAttachment(attachment)}\n`);
 
     const runtime = new ScreenRuntime(ecu, screen, new ElmLink(driver));
     await runtime.runPresend();

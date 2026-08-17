@@ -1,0 +1,27 @@
+{
+  "name": "@ddtx/session",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The seam between the database and the driver: attaching to an ECU, and the gates before a write",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ddtx/codec": "workspace:*",
+    "@ddtx/core": "workspace:*",
+    "@ddtx/db": "workspace:*",
+    "@ddtx/elm": "workspace:*"
+  }
+}

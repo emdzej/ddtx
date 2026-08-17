@@ -15,9 +15,11 @@
     "@ddtx/codec": "workspace:*",
     "@ddtx/core": "workspace:*",
     "@ddtx/db": "workspace:*",
+    "@ddtx/elm": "workspace:*",
+    "@ddtx/i18n": "workspace:*",
     "@ddtx/link": "workspace:*",
     "@ddtx/screens": "workspace:*",
-    "@ddtx/i18n": "workspace:*"
+    "@ddtx/session": "workspace:*"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",

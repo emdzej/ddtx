@@ -27,7 +27,7 @@
     widgetParts,
   } from "@ddtx/screens";
   import type { ScreenSnapshot } from "@ddtx/screens";
-  import { app, currentEcu, pressButton, t, untranslated } from "../lib/state.svelte.js";
+  import { app, buttonGate, currentEcu, pressButton, t, untranslated } from "../lib/state.svelte.js";
 
   interface Props {
     screen: PreparedScreen;
@@ -150,13 +150,17 @@
 
       {#each screen.buttons as button (button.uniquename)}
         {@const rect = scaleRect(button.rect, scale)}
+        {@const gate = buttonGate()}
         <button
           class="ecu-button"
+          class:blocked={!gate.allowed}
           style="{css(rect)};{fontStyle(button.font)}"
-          disabled={button.send.length === 0}
+          disabled={button.send.length === 0 || !gate.allowed}
           title={button.send.length === 0
             ? "No request attached"
-            : button.send.map((s) => s.RequestName).join("\n")}
+            : !gate.allowed
+              ? (gate.reason ?? "Not allowed")
+              : button.send.map((s) => s.RequestName).join("\n")}
           onclick={() => void pressButton(button.uniquename)}
         >
           {t("button", button.text)}
@@ -320,6 +324,13 @@
   .ecu-button:disabled {
     color: var(--ink-faint);
     cursor: not-allowed;
+  }
+
+  /* Blocked by a write gate rather than by the database: the reason is in the
+     tooltip, and the mark says the control exists but is being withheld. */
+  .ecu-button.blocked {
+    border-style: dashed;
+    border-color: var(--red);
   }
 
   /* Inspect: show the measurement rather than hide it. */

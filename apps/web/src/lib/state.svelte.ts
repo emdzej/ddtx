@@ -20,7 +20,24 @@ import {
   type PreparedLayout,
   type PreparedScreen,
 } from "@ddtx/db";
-import { SimulatedLink, type FillMode } from "@ddtx/link";
+import { SimulatedLink, type EcuLink, type FillMode } from "@ddtx/link";
+import {
+  CANDIDATE_BAUD_RATES,
+  ElmDriver,
+  ElmLink,
+  WebSerialTransport,
+  type AdapterInfo,
+  type WebSerialPortLike,
+} from "@ddtx/elm";
+import {
+  attachEcu,
+  checkWriteGates,
+  confirmationPrompt,
+  describeAttachment,
+  isReachable,
+  withAdapterLock,
+  type GateDecision,
+} from "@ddtx/session";
 import { ScreenRuntime, type ScreenSnapshot, testerPresentFrame } from "@ddtx/screens";
 import type { LoadedEcu } from "@ddtx/db";
 
@@ -107,6 +124,36 @@ interface AppState {
   overlayVersion: number;
   /** Outline strings that fell through to French, to make gaps findable. */
   showUntranslated: boolean;
+
+  /** Web Serial is Chromium-desktop only; this is false everywhere else. */
+  serialSupported: boolean;
+  /**
+   * Which link the screens are actually running through.
+   *
+   * A reactive fact rather than something the UI asks a function for. It used to
+   * be `$derived(isLive())`, which reads the driver from module scope — Svelte
+   * cannot see that, so the strip kept saying "Demo" with a vehicle attached.
+   * Given that this indicator's whole job is to be true, it must not depend on a
+   * variable the compiler cannot track.
+   */
+  linkKind: "simulated" | "elm";
+  connection: "idle" | "connecting" | "connected" | "error";
+  /** Status line for the strip. */
+  connectionMessage: string;
+  adapter: AdapterInfo | null;
+  /** How this ECU is addressed once attached, for the header. */
+  attachment: string | null;
+  /**
+   * Has the operator turned writing on?
+   *
+   * Off by default and never remembered. A browser tab can be backgrounded,
+   * duplicated, or closed mid-write, none of which the Qt app has to survive, so
+   * enabling writes is a decision made per session rather than a preference
+   * (docs/plan.md §6.3).
+   */
+  writesEnabled: boolean;
+  /** Last refusal, so the reason is visible rather than a dead button. */
+  lastRefusal: string | null;
 }
 
 const CATALOGUE_KEY = "ddtx.catalogueOpen";
@@ -171,6 +218,14 @@ export const app = $state<AppState>({
   overlaySize: 0,
   overlayVersion: 0,
   showUntranslated: false,
+  serialSupported: typeof navigator !== "undefined" && "serial" in navigator,
+  linkKind: "simulated",
+  connection: "idle",
+  connectionMessage: "Not connected",
+  adapter: null,
+  attachment: null,
+  writesEnabled: false,
+  lastRefusal: null,
 });
 
 export function setCatalogueOpen(open: boolean): void {
@@ -200,6 +255,30 @@ let overlay = Overlay.none();
  * else.
  */
 let selectionToken = 0;
+
+/**
+ * The live driver, when a vehicle is attached.
+ *
+ * Plain variables rather than `$state`: `ElmDriver` and the transport hold
+ * `this`-bound methods and internal buffers that a Proxy would interfere with.
+ */
+let driver: ElmDriver | null = null;
+let transport: WebSerialTransport | null = null;
+
+/**
+ * Is a real vehicle on the other end?
+ *
+ * The reactive field is read **first**, deliberately. Written the other way round
+ * — `driver !== null && app.linkKind === "elm"` — JavaScript short-circuits on the
+ * null driver and never reads the reactive value, so nothing that calls this from
+ * a template ever gets invalidated when a vehicle is attached. That is exactly how
+ * the ECU buttons stayed unmarked while `pressButton` was refusing them.
+ *
+ * `driver` is still checked, so the answer cannot be true without one.
+ */
+export function isLive(): boolean {
+  return app.linkKind === "elm" && driver !== null;
+}
 
 /**
  * Translate a database string for display.
@@ -402,6 +481,100 @@ export async function selectEcu(summary: EcuSummary): Promise<void> {
   }
 }
 
+/**
+ * Ask for a port and bring up the adapter.
+ *
+ * Must be called from a click: `requestPort()` needs a user gesture, which is why
+ * the browser cannot enumerate ports on its own the way the CLI can.
+ *
+ * Baud rates are tried in the order `ELM.__init__` tries them, because an ELM327
+ * clone's rate is whatever it was last set to and there is no way to ask.
+ */
+export async function connect(): Promise<void> {
+  const serial = (
+    navigator as unknown as { serial?: { requestPort(): Promise<WebSerialPortLike> } }
+  ).serial;
+  if (serial === undefined) {
+    app.connection = "error";
+    app.connectionMessage = "This browser has no Web Serial. Use Chrome or Edge on desktop.";
+    return;
+  }
+
+  app.connection = "connecting";
+  app.connectionMessage = "Choosing a port…";
+  app.lastRefusal = null;
+
+  let port: WebSerialPortLike;
+  try {
+    port = await serial.requestPort();
+  } catch {
+    // The operator dismissed the picker; that is not an error worth shouting.
+    app.connection = "idle";
+    app.connectionMessage = "Not connected";
+    return;
+  }
+
+  for (const baudRate of CANDIDATE_BAUD_RATES) {
+    app.connectionMessage = `Trying ${baudRate} baud…`;
+    const candidate = new WebSerialTransport(port, { baudRate }, `Web Serial @ ${baudRate}`);
+    try {
+      await candidate.open();
+      const candidateDriver = new ElmDriver(candidate);
+      const info = await candidateDriver.identify();
+
+      // An adapter at the wrong baud answers noise, not a version string.
+      if (info.version === "unknown") {
+        await candidate.close();
+        continue;
+      }
+
+      transport = candidate;
+      driver = candidateDriver;
+      app.adapter = info;
+      app.linkKind = "elm";
+      app.connection = "connected";
+      app.connectionMessage = `${info.version} at ${baudRate} baud · ${candidateDriver.canStrategy}`;
+      // Re-open the current screen through the real link.
+      await reopenCurrentScreen();
+      return;
+    } catch (cause) {
+      await candidate.close().catch(() => undefined);
+      app.connectionMessage = cause instanceof Error ? cause.message : String(cause);
+    }
+  }
+
+  app.connection = "error";
+  app.connectionMessage = "No ELM327 answered on that port at any baud rate.";
+}
+
+export async function disconnect(): Promise<void> {
+  stopAutoRefresh();
+  // Writing is never left on across a connection: the next vehicle is a new
+  // decision.
+  app.writesEnabled = false;
+  try {
+    await driver?.closeProtocol();
+  } catch {
+    /* the adapter may already be gone */
+  }
+  await transport?.close().catch(() => undefined);
+  driver = null;
+  transport = null;
+  app.linkKind = "simulated";
+  app.adapter = null;
+  app.attachment = null;
+  app.connection = "idle";
+  app.connectionMessage = "Not connected";
+  await reopenCurrentScreen();
+}
+
+/** Rebuild the runtime so a link change takes effect on the open screen. */
+async function reopenCurrentScreen(): Promise<void> {
+  const name = app.screen?.name;
+  if (name === undefined) return;
+  await openScreen(name);
+}
+
 export async function openScreen(name: string): Promise<void> {
   if (layout === null || ecu === null) return;
   const screen = layout.screens.get(name);
@@ -410,6 +583,25 @@ export async function openScreen(name: string): Promise<void> {
   stopAutoRefresh();
   app.screen = screen;
   app.snapshot = null;
+
+  // With a vehicle attached the adapter has to be configured for this ECU before
+  // anything is sent. Cheap to repeat: the driver short-circuits when it is
+  // already addressing it, so moving between screens of one ECU costs nothing.
+  if (driver !== null) {
+    if (!isReachable(ecu)) {
+      app.attachment = null;
+      app.connectionMessage = `${ecu.def.obd.protocol} is not reachable from a browser`;
+      return;
+    }
+    try {
+      app.attachment = describeAttachment(await attachEcu(driver, ecu));
+    } catch (cause) {
+      app.attachment = null;
+      app.connectionMessage = cause instanceof Error ? cause.message : String(cause);
+      return;
+    }
+  }
+
   runtime = new ScreenRuntime(ecu, screen, makeLink());
 
   // Presend runs on entry, as the Qt app does when it isn't polling.
@@ -417,8 +609,16 @@ export async function openScreen(name: string): Promise<void> {
   await refresh();
 }
 
-function makeLink(): SimulatedLink {
+/**
+ * The link the screen runtime talks through.
+ *
+ * `ElmLink` and `SimulatedLink` are interchangeable, which is what lets demo mode
+ * stay the offline development path instead of becoming dead code once hardware
+ * works.
+ */
+function makeLink(): EcuLink {
   if (ecu === null) throw new Error("makeLink called with no ECU loaded");
+  if (driver !== null) return new ElmLink(driver);
   return new SimulatedLink(ecu.requests, { fill: app.fill, drift: app.drift });
 }
 
@@ -459,10 +659,63 @@ function stopAutoRefresh(): void {
   app.autoRefresh = false;
 }
 
+/**
+ * Would pressing a button be allowed right now?
+ *
+ * Exposed so a button can be disabled with the reason in its tooltip, rather than
+ * looking pressable and then silently doing nothing.
+ *
+ * Demo mode is exempt: there is no vehicle to protect, and gating it would make
+ * the offline path useless for building screens.
+ */
+export function buttonGate(): GateDecision {
+  if (!isLive()) return { allowed: true };
+  return checkWriteGates({ writesEnabled: app.writesEnabled, live: true });
+}
+
+/**
+ * Fire a button's requests.
+ *
+ * On a live vehicle this is the only path that puts bytes on the bus off the back
+ * of a click, so every gate is checked here rather than trusted to the caller:
+ * writes enabled, tab visible, no other tab holding the adapter, and the operator
+ * confirmed. See docs/plan.md §6.3.
+ */
 export async function pressButton(uniquename: string): Promise<void> {
   if (runtime === null || app.screen === null) return;
   const button = app.screen.buttons.find((b) => b.uniquename === uniquename);
   if (button === undefined) return;
-  await runtime.pressButton(button);
+
+  const live = isLive();
+  if (live) {
+    const gate = checkWriteGates({ writesEnabled: app.writesEnabled, live: true });
+    if (!gate.allowed) {
+      app.lastRefusal = gate.reason ?? "Not allowed.";
+      return;
+    }
+
+    const prompt = confirmationPrompt(
+      button.text,
+      button.messages,
+      button.send.map((entry) => entry.RequestName),
+    );
+    if (!globalThis.confirm(prompt)) {
+      app.lastRefusal = "Cancelled.";
+      return;
+    }
+
+    const outcome = await withAdapterLock(async () => {
+      await runtime?.pressButton(button);
+    });
+    if (!outcome.ran) {
+      app.lastRefusal =
+        "Another ddtx tab is using this adapter. Close it, or disconnect there first.";
+      return;
+    }
+  } else {
+    await runtime.pressButton(button);
+  }
+
+  app.lastRefusal = null;
   await refresh();
 }

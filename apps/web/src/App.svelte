@@ -14,6 +14,8 @@
   import Trace from "./components/Trace.svelte";
   import {
     app,
+    connect,
+    disconnect,
     openDatabase,
     reconfigureDemo,
     refresh,
@@ -22,6 +24,17 @@
   } from "./lib/state.svelte.js";
 
   onMount(() => void openDatabase());
+
+  /**
+   * The mode indicator is read off reactive state, never set by hand.
+   *
+   * It was the literal string "Demo" first, which would have gone on claiming no
+   * vehicle was connected while writing to one. Then it was `$derived(isLive())`,
+   * which reads the driver from module scope — invisible to the compiler, so it
+   * stayed on "Demo" with a vehicle attached. `linkKind` is the fact the screens
+   * themselves use, so the two cannot disagree.
+   */
+  const live = $derived(app.linkKind === "elm");
 
   /** What each fill mode actually does, in the user's terms. */
   const FILL_HELP: Record<string, string> = {
@@ -32,12 +45,21 @@
 </script>
 
 <div class="app">
-  <div class="strip" role="status">
-    <span class="badge">Demo</span>
+  <div class="strip" class:live role="status">
+    <span class="badge">{live ? "Live" : "Demo"}</span>
     <span class="claim">
-      Values are generated from the database. No vehicle is connected.
+      {#if live}
+        {app.connectionMessage}{app.attachment === null ? "" : ` · ${app.attachment}`}
+      {:else if app.connection === "connecting"}
+        {app.connectionMessage}
+      {:else if app.connection === "error"}
+        {app.connectionMessage}
+      {:else}
+        Values are generated from the database. No vehicle is connected.
+      {/if}
     </span>
 
+    {#if !live}
     <label class="control">
       <span class="eyebrow">Fill</span>
       <select
@@ -55,6 +77,13 @@
       <input type="checkbox" bind:checked={app.drift} onchange={() => void reconfigureDemo()} />
       <span>Vary values</span>
     </label>
+    {:else}
+      <!-- Writing is off by default and never remembered; see docs/plan.md §6.3. -->
+      <label class="control check danger" title="Allow buttons to send to the vehicle">
+        <input type="checkbox" bind:checked={app.writesEnabled} />
+        <span>Allow writing</span>
+      </label>
+    {/if}
 
     <label class="control check">
       <input type="checkbox" bind:checked={app.inspect} />
@@ -104,6 +133,24 @@
       <span>Keep reading</span>
     </label>
 
+    {#if app.serialSupported}
+      {#if live}
+        <button class="link-button" onclick={() => void disconnect()}>Disconnect</button>
+      {:else}
+        <button
+          class="link-button"
+          onclick={() => void connect()}
+          disabled={app.connection === "connecting"}
+        >
+          {app.connection === "connecting" ? "Connecting…" : "Connect vehicle"}
+        </button>
+      {/if}
+    {:else}
+      <span class="unsupported" title="Web Serial is available in Chrome and Edge on desktop">
+        No Web Serial
+      </span>
+    {/if}
+
     <button class="read" onclick={() => void refresh()} disabled={app.screen === null || app.refreshing}>
       {app.refreshing ? "Reading…" : "Read now"}
     </button>
@@ -143,14 +190,44 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
     </div>
   </main>
 
+  <!-- Always rendered, empty when there is nothing to say: the grid assigns rows
+       by child order, so a conditional element here would shift `main` into the
+       auto row and hand the remaining space to the tricolour. -->
+  <div class="notice-row">
+    {#if app.lastRefusal !== null}
+      <p class="refusal" role="alert">
+        {app.lastRefusal}
+        <button onclick={() => (app.lastRefusal = null)} aria-label="Dismiss">×</button>
+      </p>
+    {/if}
+  </div>
+
   <div class="tricolour" aria-hidden="true"></div>
 </div>
 
 <style>
   .app {
     display: grid;
-    grid-template-rows: var(--strip-height) minmax(0, 1fr) 4px;
+    /* Explicit rows, and every child names its own, so an empty notice row cannot
+       shift the layout. */
+    grid-template-rows: var(--strip-height) auto minmax(0, 1fr) 4px;
     height: 100%;
+  }
+
+  .strip {
+    grid-row: 1;
+  }
+
+  .notice-row {
+    grid-row: 2;
+  }
+
+  main {
+    grid-row: 3;
+  }
+
+  .tricolour {
+    grid-row: 4;
   }
 
   /*
@@ -184,6 +261,20 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
     font-size: 11.5px;
   }
 
+  /* Red Marianne only when a vehicle is really attached — the one mode change
+     that must be impossible to miss. */
+  .strip.live {
+    background: var(--red);
+  }
+
+  .strip.live .claim {
+    color: #ffd9d9;
+  }
+
+  .strip.live .control .eyebrow {
+    color: #ffc4c4;
+  }
+
   .badge {
     padding: 2px 7px;
     background: #fff;
@@ -192,6 +283,10 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
     font-weight: 800;
     letter-spacing: 0.14em;
     text-transform: uppercase;
+  }
+
+  .strip.live .badge {
+    color: var(--red);
   }
 
   .claim {
@@ -230,6 +325,60 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
 
   .spacer {
     flex: 1;
+  }
+
+  .link-button {
+    padding: 3px 11px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+  }
+
+  .link-button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.24);
+  }
+
+  .link-button:disabled {
+    color: rgba(255, 255, 255, 0.5);
+    cursor: not-allowed;
+  }
+
+  .unsupported {
+    color: #9095cf;
+    font-size: 11px;
+  }
+
+  /* Writing is the one destructive control, so it is the one marked. */
+  .control.danger span {
+    font-weight: 700;
+  }
+
+  /* A real grid child, so row assignment is stable whether or not it has
+     content; it simply has no height when empty. */
+  .notice-row:empty {
+    display: none;
+  }
+
+  .refusal {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 7px 14px;
+    background: #fff;
+    border-bottom: 1px solid var(--rule);
+    box-shadow: inset 3px 0 0 var(--red);
+    font-size: 12px;
+  }
+
+  .refusal button {
+    margin-left: auto;
+    background: none;
+    border: 0;
+    color: var(--ink-faint);
+    font-size: 15px;
+    line-height: 1;
   }
 
   .read {

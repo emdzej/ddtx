@@ -389,9 +389,18 @@ it needs no hardware and it de-risks everything above the link:
 - [x] `apps/web` — the browser client: catalogue, screen index, canvas renderer,
       bus trace, inspect overlay
 
-**Phase 2 — ELM driver (2–3 weeks incl. car time).** CAN first (STPX path, then
-`CFC0` fallback), KWP2000 fastinit second, ISO8 last. `SimulatedLink` and
-`ElmLink` are interchangeable behind `EcuLink`, so the UI needs no changes.
+**Phase 2 — ELM driver.** Built without hardware, against a scripted adapter:
+- [x] `packages/elm` — AT layer, adapter identification, protocol setup for CAN /
+      KWP2000 / ISO8, software ISO-TP, `MockElm`, and the Web Serial transport.
+      `cfc0` deliberately unimplemented until measured (§6.1)
+- [x] `packages/session` — `attachEcu` (the seam between database and driver) and
+      the write gates (§6.3)
+- [x] `apps/cli` — `ports`, `probe`, `bench`, `read`, `screens`. `bench` is the
+      phase-0 instrument
+- [x] Browser connect flow, with the mode strip driven by the link rather than a
+      hardcoded string
+- [ ] **Phase 0 measurement, on a vehicle.** Everything above is verified against
+      a mock; what remains is real timing
 
 **Phase 3 — read-only screens (1–2 weeks).** Mostly done by phase 1.5; what
 remains is driving it from a real link.

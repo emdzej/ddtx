@@ -18,6 +18,7 @@
     "@ddtx/elm": "workspace:*",
     "@ddtx/link": "workspace:*",
     "@ddtx/screens": "workspace:*",
+    "@ddtx/session": "workspace:*",
     "serialport": "^12.0.0"
   },
   "devDependencies": {
