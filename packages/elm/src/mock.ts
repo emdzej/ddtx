@@ -78,6 +78,7 @@ export class MockElm extends BufferedTransport {
     const command = text.replace(/\r$/, "");
     this.written.push(command);
 
+
     if (this.latencyMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
     }
@@ -96,7 +97,10 @@ export class MockElm extends BufferedTransport {
       return this.respondToSetting(upper);
     }
 
-    const frames = this.onFrame(upper, this);
+    // A real ELM327 ignores spaces inside a request, and both request paths in
+    // the original use them inconsistently — `send_request` joins with spaces,
+    // `updateDisplay` does not. Normalise so a handler only sees one form.
+    const frames = this.onFrame(upper.replace(/\s+/g, ""), this);
     if (frames === undefined) return "NO DATA";
     return (typeof frames === "string" ? [frames] : frames).join("\r");
   }
@@ -148,6 +152,38 @@ export class MockElm extends BufferedTransport {
 }
 
 /**
+ * Wrap a handler so it sees a whole request, not one frame at a time.
+ *
+ * A real adapter answers a multi-frame request only after the final frame — the
+ * earlier writes get a bare prompt. Without this the mock replies to every frame,
+ * which both invents traffic that would not exist and hides whether the driver
+ * writes the frames correctly.
+ */
+export function reassemblingHandler(inner: FrameHandler): FrameHandler {
+  let pending = "";
+
+  return (frame, mock) => {
+    const pci = frame.slice(0, 1);
+
+    if (pci === "1") {
+      // First frame: 3-nibble length, then 6 payload bytes.
+      pending = frame.slice(4, 16);
+      return "";
+    }
+    if (pci === "2") {
+      pending += frame.slice(2, 16);
+      // The driver writes every frame back to back, so the last one is the last
+      // write; answer then. Trailing padding is trimmed by the caller's lookup.
+      const complete = pending;
+      pending = "";
+      return inner(complete, mock);
+    }
+    // Single frame: strip the length nibble pair and pass the request through.
+    return inner(frame.slice(2), mock);
+  };
+}
+
+/**
  * A handler that answers with a correctly framed single- or multi-frame response.
  *
  * Takes the payload the ECU should return and does the ISO-TP framing, so tests
@@ -155,9 +191,10 @@ export class MockElm extends BufferedTransport {
  */
 export function respondWithPayload(payloadByRequest: Record<string, string>): FrameHandler {
   return (frame) => {
-    // Strip the request's own PCI byte to recover the service request.
-    const request = frame.slice(2);
-    const payload = payloadByRequest[request] ?? payloadByRequest[frame];
+    // Strip the request's own PCI byte to recover the service request. Also try
+    // the frame verbatim, so a handler wrapped by `reassemblingHandler` — which
+    // has already stripped it — still matches.
+    const payload = payloadByRequest[frame.slice(2)] ?? payloadByRequest[frame];
     if (payload === undefined) return undefined;
 
     const hex = payload.replace(/\s+/g, "").toUpperCase();

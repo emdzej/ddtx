@@ -13,6 +13,7 @@
     "db:split:force": "node tools/db-split/dist/index.js data/ecu.zip data/tree",
     "web:build": "pnpm --filter @ddtx/web build",
     "web:preview": "pnpm --filter @ddtx/web preview",
+    "cli": "node apps/cli/dist/index.js",
     "lint": "turbo run lint",
     "test": "vitest run",
     "test:db": "DDTX_DB_TREE=data/tree vitest run",

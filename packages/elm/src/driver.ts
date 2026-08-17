@@ -181,6 +181,13 @@ export class ElmDriver {
     };
     this.adapter = adapter;
     this.strategy = this.forcedStrategy ?? (supportsStpx ? "stpx" : "manual");
+
+    // Capability probing provokes a "?" from any adapter that isn't an STN part —
+    // that is how detection works, not a fault. Counting it would put a phantom
+    // error in every report.
+    for (const key of Object.keys(this.errors) as Array<keyof typeof this.errors>) {
+      this.errors[key] = 0;
+    }
     return adapter;
   }
 

@@ -1,0 +1,26 @@
+{
+  "name": "@ddtx/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Drive the ELM327 driver from a terminal \u2014 probe an adapter, measure latency, read a screen",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "bin": {
+    "ddtx": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ddtx/db": "workspace:*",
+    "@ddtx/elm": "workspace:*",
+    "@ddtx/link": "workspace:*",
+    "@ddtx/screens": "workspace:*",
+    "serialport": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1"
+  }
+}

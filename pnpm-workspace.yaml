@@ -2,3 +2,8 @@ packages:
   - "packages/*"
   - "apps/*"
   - "tools/*"
+
+# serialport ships a native binding; without this pnpm skips its build script and
+# `require('serialport')` fails at run time with a missing-binding error.
+onlyBuiltDependencies:
+  - "@serialport/bindings-cpp"
