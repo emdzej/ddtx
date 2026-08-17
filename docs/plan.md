@@ -258,6 +258,17 @@ stay in ddtx** — nothing else we own speaks ELM.
 
 ### 6.1 ISO-TP flow-control timing — the go/no-go
 
+> **Measured 2026-08-17: this risk did not materialise.** Host↔adapter round trip
+> is 5.8 ms at p50 over Web Serial, sd 0.2, no stall above 7.4 ms in 200 exchanges,
+> on a Prolific-bridged ELM327 clone. There is no 16 ms latency floor and Chrome
+> adds nothing over Node. `cfc0` is viable as a fallback at ~6.4 ms per
+> flow-control frame, and it owes one per _seven_ consecutive frames rather than
+> one per frame.
+>
+> The analysis below is kept as written, because the reasoning about why this was
+> the go/no-go still holds for **FTDI** hardware — which this adapter was not. See
+> [`protocols.md`](protocols.md) §2.4 for the numbers and the caveats.
+
 `elm.py` is 1,962 lines mostly because the ELM327's automatic flow control is
 inadequate, so DDT4All does software flow control: `send_can_cfc0` sets
 `AT CFC0` and hand-sends flow-control frames between blocks. That needs tight
@@ -406,8 +417,10 @@ it needs no hardware and it de-risks everything above the link:
       3.84 ms per exchange, 0.284 ms per byte at 38400, p99 8.1 ms over 400
       samples, no stalls. No 16 ms FTDI floor — see `protocols.md` §2.4. `cfc0`
       is viable as a fallback; `manual` stays the default
-- [ ] **The same measurement over Web Serial**, via the app's _Measure link_
-      button. Node was measured, and the browser is a different path
+- [x] **The same measurement over Web Serial** (2026-08-17): p50 5.8 ms, p99
+      7.0, max 7.4, sd 0.2 over 200 exchanges. Chrome adds nothing measurable and
+      its tail is tighter than Node's. **§6.1's central risk does not hold on this
+      hardware** — the bottleneck is the 38400 baud UART, not the browser
 - [ ] **On a vehicle**: real ECU response timing, and whether the adapter's own
       `CFC1` flow control holds on a live bus
 

@@ -216,9 +216,41 @@ browser adds Chrome's serial service and an IPC hop that the CLI does not have, 
 that is the path the app actually uses. It also says nothing about real ECU
 response timing, or whether the adapter's own `CFC1` works on a live bus.
 
-The browser half is a click: connect a vehicle and press **Measure link**, which
-times 200 `AT` exchanges over Web Serial and reports the same distribution. Run the
-two side by side and the difference is Chrome's contribution.
+#### The browser half, same day
+
+Same adapter, same 38400 baud, measured through the app's **Measure link** button —
+so over Web Serial, in Chrome, which is the transport the app actually uses.
+
+|            | Node `serialport`, n=400 | Web Serial, n=200 |
+| ---------- | ------------------------ | ----------------- |
+| min        | 5.5 ms                   | 5.5 ms            |
+| p50        | 5.7 ms                   | **5.8 ms**        |
+| p90        | 6.0 ms                   | 6.0 ms            |
+| p99        | 8.1 ms                   | **7.0 ms**        |
+| max        | 14.1 ms                  | **7.4 ms**        |
+| sd         | 2.0                      | **0.2**           |
+| over 50 ms | 0                        | 0                 |
+
+**Chrome adds nothing measurable.** 0.1 ms at p50 is inside the noise, and the
+tail is _tighter_ than Node's — sd 0.2 against 2.0. Part of the max difference is
+sample size (200 against 400), but an sd of 0.2 over 200 exchanges is a real
+signal, and the Node run had a measurement script sharing its event loop where
+Chrome's serial service has a process to itself.
+
+So the concern that shaped much of this driver's design — that Web Serial's
+buffering would put a floor under every exchange — **does not hold on this
+hardware**. The browser is not the bottleneck; the 38400 baud UART is.
+
+What that means in practice, using the measured single-frame cost of ~10 ms: the
+richest screen in the database polls **2 requests**, so a full refresh of its 169
+widgets costs ~20 ms of link time. Even a ten-request screen sits near 100 ms,
+comfortably inside the 700 ms auto-refresh interval. Note this is a floor, not a
+prediction — those exchanges were answered `CAN ERROR` by an adapter with no bus,
+and a real ECU adds its own processing time.
+
+Still unmeasured, and needing a vehicle: real ECU response timing, and whether the
+adapter's own `CFC1` flow control holds on a live bus — which is the only thing
+that would make the `cfc0` fallback matter at all.
 
 ### Keepalive
 

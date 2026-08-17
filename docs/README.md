@@ -64,5 +64,14 @@ pnpm cli bench --port /dev/tty.usbserial-XXXX
 ```
 
 `bench` answers whether software flow control (`cfc0`) is viable over a link whose
-latency cannot be controlled from a web page. It is the only reason that strategy
-is still unimplemented — see [`protocols.md`](protocols.md#24-flow-control-the-open-question).
+latency cannot be controlled from a web page.
+
+**Answered on 2026-08-17** for one adapter: 5.8 ms per exchange over Web Serial
+with an sd of 0.2 and no stalls, so no latency floor and no Chrome penalty. `cfc0`
+is viable; `manual` remains the default because the adapter answers flow control
+without a host round trip at all. Numbers and caveats in
+[`protocols.md`](protocols.md#24-flow-control-the-open-question).
+
+What still needs a vehicle: real ECU response timing, and whether the adapter's own
+`CFC1` holds on a live bus — the only thing that would make the `cfc0` fallback
+matter.
