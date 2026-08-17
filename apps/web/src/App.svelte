@@ -14,6 +14,7 @@
   import Trace from "./components/Trace.svelte";
   import {
     app,
+    benchLink,
     connect,
     disconnect,
     openDatabase,
@@ -135,6 +136,14 @@
 
     {#if app.serialSupported}
       {#if live}
+        <button
+          class="link-button"
+          onclick={() => void benchLink()}
+          disabled={app.benching}
+          title="Time 200 AT exchanges to find this link's round-trip floor. Needs no vehicle."
+        >
+          {app.benching ? "Measuring…" : "Measure link"}
+        </button>
         <button class="link-button" onclick={() => void disconnect()}>Disconnect</button>
       {:else}
         <button
@@ -194,6 +203,13 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
        by child order, so a conditional element here would shift `main` into the
        auto row and hand the remaining space to the tricolour. -->
   <div class="notice-row">
+    {#if app.linkBench !== null}
+      <p class="bench">
+        <span class="eyebrow">Link</span>
+        <span class="hex">{app.linkBench}</span>
+        <button onclick={() => (app.linkBench = null)} aria-label="Dismiss">×</button>
+      </p>
+    {/if}
     {#if app.lastRefusal !== null}
       <p class="refusal" role="alert">
         {app.lastRefusal}
@@ -358,6 +374,26 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
      content; it simply has no height when empty. */
   .notice-row:empty {
     display: none;
+  }
+
+  .bench {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    padding: 7px 14px;
+    background: #fff;
+    border-bottom: 1px solid var(--rule);
+    box-shadow: inset 3px 0 0 var(--blue);
+  }
+
+  .bench button {
+    margin-left: auto;
+    background: none;
+    border: 0;
+    color: var(--ink-faint);
+    font-size: 15px;
+    line-height: 1;
   }
 
   .refusal {

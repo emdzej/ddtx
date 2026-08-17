@@ -168,6 +168,58 @@ So implementing `cfc0` before measuring would be guessing, and `pnpm cli bench`
 exists to take the measurement. See [`plan.md`](plan.md) §6.1 and
 [`../apps/cli/README.md`](../apps/cli/README.md).
 
+#### First measurement — 2026-08-17
+
+Hardware: a generic **ELM327 v1.5 clone** on a **Prolific PL2303** bridge
+(`067b:2303`), macOS, 38400 baud, **no vehicle attached**. Node's `serialport`.
+
+The vehicle being absent is not a limitation here: `AT` is answered by the
+adapter's own firmware, so it isolates exactly the host↔adapter path this question
+is about.
+
+| Measurement                 | Result                                         |
+| --------------------------- | ---------------------------------------------- |
+| Fixed cost per exchange     | **3.84 ms** (least-squares intercept)          |
+| Cost per reply byte         | **0.284 ms** — theory at 38400 8N1 is 0.260    |
+| `AT` round trip, n=400      | p50 **5.7**, p90 6.0, p99 8.1, **max 14.1 ms** |
+| Exchanges over 50 ms        | **0**                                          |
+| Second write in one request | 2.4× the first                                 |
+
+Three conclusions:
+
+**There is no 16 ms floor here.** That figure is an FTDI default, and this is a
+Prolific part. The fixed cost is 3.84 ms and the distribution is tight and
+unimodal — 90% of 400 exchanges fell in one 2 ms bucket, with no stall anywhere
+near the ~150 ms an ISO-TP `N_Cs` deadline allows.
+
+**Most of the cost is the baud rate, not latency.** 0.284 ms measured against
+0.260 ms theoretical is within 9%, so per-byte cost is essentially pure wire time.
+That makes the UART speed the largest available lever — but this adapter refuses
+it: `ATBRD` returns `OK` and then never switches rate, which is common clone
+behaviour. An STN part at 115200+ would be roughly 3× faster on the wire before any
+other consideration.
+
+**`cfc0` is viable on this hardware.** The deciding detail is that it caps block
+size at 7 (`elm.py:1428` — `min(nFrames - cFrame, 0x7)`), so it owes **one flow
+control frame per seven consecutive frames**, not one per frame. At ~6.4 ms per FC
+exchange that is ~13 ms extra for a typical multi-frame response, and ~0.5 s for
+the database's 4,092-byte worst case.
+
+That does not make it the default. `manual` (`AT CFC1`) has the adapter answer flow
+control with no host round trip at all, so it remains strictly better — `cfc0` is
+the fallback the original reaches for when the adapter's own flow control fails,
+and this measurement says that fallback is now worth implementing rather than
+feared.
+
+**What this does not measure.** Node's `serialport`, not **Web Serial** — the
+browser adds Chrome's serial service and an IPC hop that the CLI does not have, and
+that is the path the app actually uses. It also says nothing about real ECU
+response timing, or whether the adapter's own `CFC1` works on a live bus.
+
+The browser half is a click: connect a vehicle and press **Measure link**, which
+times 200 `AT` exchanges over Web Serial and reports the same distribution. Run the
+two side by side and the difference is Chrome's contribution.
+
 ### Keepalive
 
 An ECU drops back to the default session on its own after a silence. If a session

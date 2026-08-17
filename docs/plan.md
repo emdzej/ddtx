@@ -402,8 +402,14 @@ it needs no hardware and it de-risks everything above the link:
       phase-0 instrument
 - [x] Browser connect flow, with the mode strip driven by the link rather than a
       hardcoded string
-- [ ] **Phase 0 measurement, on a vehicle.** Everything above is verified against
-      a mock; what remains is real timing
+- [x] **Adapter timing measured** (2026-08-17, no vehicle needed): fixed cost
+      3.84 ms per exchange, 0.284 ms per byte at 38400, p99 8.1 ms over 400
+      samples, no stalls. No 16 ms FTDI floor — see `protocols.md` §2.4. `cfc0`
+      is viable as a fallback; `manual` stays the default
+- [ ] **The same measurement over Web Serial**, via the app's _Measure link_
+      button. Node was measured, and the browser is a different path
+- [ ] **On a vehicle**: real ECU response timing, and whether the adapter's own
+      `CFC1` flow control holds on a live bus
 
 **Phase 3 — read-only screens (1–2 weeks).** Mostly done by phase 1.5; what
 remains is driving it from a real link.

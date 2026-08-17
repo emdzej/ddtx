@@ -154,6 +154,17 @@ interface AppState {
   writesEnabled: boolean;
   /** Last refusal, so the reason is visible rather than a dead button. */
   lastRefusal: string | null;
+  /**
+   * Result of the in-app link measurement, when it has been run.
+   *
+   * The CLI measures the same thing over Node's `serialport`; this measures it
+   * over **Web Serial**, which is a different path — Chrome's serial service and
+   * an IPC hop the CLI does not have. The two numbers together separate "this
+   * hardware is slow" from "the browser adds cost", and only the browser number
+   * describes what the app will actually do.
+   */
+  linkBench: string | null;
+  benching: boolean;
 }
 
 const CATALOGUE_KEY = "ddtx.catalogueOpen";
@@ -226,6 +237,8 @@ export const app = $state<AppState>({
   attachment: null,
   writesEnabled: false,
   lastRefusal: null,
+  linkBench: null,
+  benching: false,
 });
 
 export function setCatalogueOpen(open: boolean): void {
@@ -547,6 +560,53 @@ export async function connect(): Promise<void> {
   app.connectionMessage = "No ELM327 answered on that port at any baud rate.";
 }
 
+/**
+ * Measure the round-trip floor over Web Serial.
+ *
+ * `AT` is the probe because the adapter answers it from firmware — no bus is
+ * involved, so this isolates the host↔adapter path and works with the vehicle
+ * unplugged. What matters is the shape: a tight distribution means a fixed floor,
+ * a long tail means something is stalling, and a p50 near a multiple of 16 ms
+ * means a driver latency timer is pacing every exchange (docs/protocols.md §2.4).
+ */
+export async function benchLink(iterations = 200): Promise<void> {
+  const active = driver;
+  if (active === null || app.benching) return;
+
+  app.benching = true;
+  app.linkBench = "Measuring…";
+  try {
+    // Discard a warm-up: the first exchange after an idle period is routinely an
+    // outlier and would dominate the max.
+    for (let i = 0; i < 3; i++) await active.sendRaw("AT");
+
+    const samples: number[] = [];
+    for (let i = 0; i < iterations; i++) {
+      const started = performance.now();
+      await active.sendRaw("AT");
+      samples.push(performance.now() - started);
+    }
+    samples.sort((a, b) => a - b);
+
+    const at = (fraction: number): number =>
+      samples[Math.min(samples.length - 1, Math.floor(fraction * samples.length))] ?? 0;
+    const mean = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+    const sd = Math.sqrt(
+      samples.reduce((sum, value) => sum + (value - mean) ** 2, 0) / samples.length,
+    );
+    const stalls = samples.filter((value) => value > 50).length;
+
+    app.linkBench =
+      `n=${samples.length}  min ${(samples[0] ?? 0).toFixed(1)}  p50 ${at(0.5).toFixed(1)}  ` +
+      `p90 ${at(0.9).toFixed(1)}  p99 ${at(0.99).toFixed(1)}  max ${(samples.at(-1) ?? 0).toFixed(1)} ms  ` +
+      `· sd ${sd.toFixed(1)}  · over 50 ms: ${stalls}`;
+  } catch (cause) {
+    app.linkBench = cause instanceof Error ? cause.message : String(cause);
+  } finally {
+    app.benching = false;
+  }
+}
+
 export async function disconnect(): Promise<void> {
   stopAutoRefresh();
   // Writing is never left on across a connection: the next vehicle is a new
@@ -565,6 +625,7 @@ export async function disconnect(): Promise<void> {
   app.attachment = null;
   app.connection = "idle";
   app.connectionMessage = "Not connected";
+  app.linkBench = null;
   await reopenCurrentScreen();
 }
 
