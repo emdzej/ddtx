@@ -190,13 +190,30 @@ export function reassemblingHandler(inner: FrameHandler): FrameHandler {
   };
 }
 
+export interface RespondOptions {
+  /**
+   * Add ISO-TP framing to the reply. **True only for CAN.**
+   *
+   * K-line carries no PCI bytes at all, so framing a reply there makes the driver
+   * read the frame header as data — a first frame `10 0B` in front of a DTC reply
+   * turns `0B` into the trouble-code count. Getting this wrong does not fail
+   * loudly; it produces plausible values decoded from the wrong offsets.
+   */
+  isotp?: boolean;
+}
+
 /**
- * A handler that answers with a correctly framed single- or multi-frame response.
+ * A handler that answers with the payload an ECU would return.
  *
- * Takes the payload the ECU should return and does the ISO-TP framing, so tests
- * can say "the ECU replies 61 80 1A 3C" without hand-writing PCI bytes.
+ * Takes the payload and, on CAN, does the ISO-TP framing — so tests can say "the
+ * ECU replies 61 80 1A 3C" without hand-writing PCI bytes. On K-line the payload is
+ * returned as spaced bytes, which is what the driver's K-line path expects to read.
  */
-export function respondWithPayload(payloadByRequest: Record<string, string>): FrameHandler {
+export function respondWithPayload(
+  payloadByRequest: Record<string, string>,
+  options: RespondOptions = {},
+): FrameHandler {
+  const isotp = options.isotp ?? true;
   return (frame) => {
     // Strip the request's own PCI byte to recover the service request. Also try
     // the frame verbatim, so a handler wrapped by `reassemblingHandler` — which
@@ -205,6 +222,10 @@ export function respondWithPayload(payloadByRequest: Record<string, string>): Fr
     if (payload === undefined) return undefined;
 
     const hex = payload.replace(/\s+/g, "").toUpperCase();
+
+    // K-line: no framing, just the bytes as text.
+    if (!isotp) return (hex.match(/.{1,2}/g) ?? []).join(" ");
+
     const bytes = hex.length / 2;
     if (bytes <= 7) {
       return [bytes.toString(16).toUpperCase().padStart(2, "0") + hex.padEnd(14, "0")];

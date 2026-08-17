@@ -427,8 +427,52 @@ it needs no hardware and it de-risks everything above the link:
 **Phase 3 — read-only screens (1–2 weeks).** Mostly done by phase 1.5; what
 remains is driving it from a real link.
 
-**Phase 4 —** inputs and buttons (writes, gated per §6.3), DTC read/clear,
-autoident scanner.
+**Phase 4 — writes, faults, and the scanner.** Also hardware-free, against the
+mock:
+
+- [x] Inputs and buttons, gated per §6.3. Every stream is built before anything is
+      sent, so a bad field refuses the whole press rather than half of it
+- [x] `packages/session/src/scan.ts` — the autoident scanner (`check_ecu` ported
+      with both offset schemes, UDS and local-identifier paths, CAN and K-line
+      sweeps). `addressesToProbe` narrows 130-odd addresses to the ones the selected
+      vehicle uses, which matters on K-line where a miss costs a 5-baud handshake
+- [x] `packages/session/src/dtc.ts` — fault read and clear, with the record window
+      sliding by `shiftbytescount`. Verified across the whole corpus: **1,392 of
+      1,580 ECUs describe a readable fault request**, all 1,392 decode, 115 distinct
+      record fields, stride 4 dominating (1,049 ECUs). See §9.1
+- [x] The browser fault panel, driven in demo mode by `simulatedDtcLink` so it could
+      be built and checked without a vehicle
+- [ ] **On a vehicle**: whether a real ECU's `MoreDTC` continuation behaves, and
+      whether the 1500 ms clear window is enough
+
+### 9.1 What building the fault reader caught
+
+Four bugs, three of them silent — the panel kept working and simply showed
+nothing, which reads as "this ECU has no faults" rather than as a defect:
+
+1. **`NO DATA` decoded as bytes.** `getHexValue` voids the _entire_ response on one
+   non-hex character, so appending `["NO", "DA", "TA"]` from an ELM's end-of-data
+   reply blanked every field of every record while leaving the count intact. Only
+   reachable on K-line, because the CAN path drops unusable lines first — which is
+   why the unit tests missed it and the KWP2000 ECU found it.
+2. **The mock framed K-line replies.** `respondWithPayload` applied ISO-TP framing
+   regardless of protocol, so a K-line ECU's reply arrived as `10 0B 57 03…` and the
+   frame header was read as the fault count: 11 codes declared where there were 3.
+   This had also been quietly corrupting `read --mock` on every K-line ECU, which
+   decoded plausible values from wrong offsets.
+3. **The erase notice was wiped by the re-read that confirms it.** Both shared one
+   state field, and a read clears it on entry — so the outcome of the one
+   irreversible action left no trace. Same shape as the trace-panel bug in §8.1.
+4. **Three ECUs name a fault request with no fields to read from it** (two side
+   radars and a front radar, all C1ARun2, `receivebyte_dataitems: {}`). They now
+   count as unsupported: a button that can only ever show nothing is worse than no
+   button.
+
+The first three were found by driving the panel in a real browser
+(`apps/web/src/faults.e2e.test.ts`, opt-in), along with a missing import that
+type-checked clean at the repo root and only failed at runtime. Root
+`svelte-check` uses a different tsconfig than `apps/web` — run `pnpm typecheck`,
+which includes both.
 
 **Deferred:** DB editor, sniffer, plugins, DoIP, host relay, WebUSB/mobile.
 The DB editor is incidentally where a web version could beat the Qt app

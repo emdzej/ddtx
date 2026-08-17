@@ -6,7 +6,7 @@ Five documents, in the order they are useful.
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [**architecture.md**](architecture.md) | How it works. Follows one value from the database to the screen and one click from the screen to the bus, which covers most of the system. Start here              |
 | [**ecu-format.md**](ecu-format.md)     | Reference for the ECU database format — every field, measured over all 1,580 ECUs, with the quirks and the outright data faults. No such reference exists upstream |
-| [**protocols.md**](protocols.md)       | What goes on the wire: ISO-TP framing, the AT sequences and why each command is there, K-line init modes, and what a browser cannot reach                          |
+| [**protocols.md**](protocols.md)       | What goes on the wire: ISO-TP framing, the AT sequences and why each command is there, K-line init modes, fault reads, and what a browser cannot reach             |
 | [**plan.md**](plan.md)                 | Why the port is shaped this way. Feasibility analysis, measured database survey, the reuse audit and its licensing conclusion, ranked risks, roadmap               |
 | [**i18n-overlay.md**](i18n-overlay.md) | The translation overlay. The database's strings double as its primary keys, which is what makes this non-obvious                                                   |
 

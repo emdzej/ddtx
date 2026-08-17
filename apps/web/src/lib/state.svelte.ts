@@ -40,6 +40,13 @@ import {
   isReachable,
   withAdapterLock,
   type GateDecision,
+  clearDtcs,
+  readDtcs,
+  simulatedDtcLink,
+  dtcClearRequestName,
+  dtcReadRequestName,
+  type DtcLink,
+  type DtcReadResult,
 } from "@ddtx/session";
 import {
   inputValuesFrom,
@@ -207,6 +214,29 @@ interface AppState {
   /** Only the addresses that answered — the point of a sweep. */
   scanFound: ProbeResult[];
   scanSummary: string | null;
+
+  /** Stored fault codes, once read. Null means "not asked yet". */
+  dtc: DtcReadResult | null;
+  /**
+   * The name of this ECU's fault-reading request, or null when it has none.
+   *
+   * Reactive state rather than a `supportsDtcRead(ecu)` call from a template: `ecu`
+   * lives in module scope, so a derived value reading it never re-runs when it
+   * changes. Three bugs of that exact shape are recorded in docs/plan.md §7.
+   */
+  dtcRequest: string | null;
+  dtcReading: boolean;
+  dtcClearing: boolean;
+  /** A read that went wrong. Cleared whenever a read starts. */
+  dtcNotice: string | null;
+  /**
+   * What happened on the last erase, kept in its own field on purpose.
+   *
+   * An erase is followed by a re-read to confirm it, and a re-read clears
+   * `dtcNotice` — so sharing one field means the outcome of the irreversible action
+   * is wiped by the step that verifies it, leaving no trace that anything happened.
+   */
+  dtcClearNotice: string | null;
 }
 
 const CATALOGUE_KEY = "ddtx.catalogueOpen";
@@ -289,6 +319,12 @@ export const app = $state<AppState>({
   scanProgress: null,
   scanFound: [],
   scanSummary: null,
+  dtc: null,
+  dtcRequest: null,
+  dtcReading: false,
+  dtcClearing: false,
+  dtcNotice: null,
+  dtcClearNotice: null,
 });
 
 export function setCatalogueOpen(open: boolean): void {
@@ -519,6 +555,12 @@ export async function selectEcu(summary: EcuSummary): Promise<void> {
   app.requestCount = 0;
   app.dataCount = 0;
   app.testerPresent = null;
+  // One ECU's faults must never be read as another's.
+  app.dtc = null;
+  app.dtcNotice = null;
+  app.dtcClearNotice = null;
+  app.dtcRequest = null;
+  simulated = null;
 
   try {
     const loadedEcu = await database.loadEcu(summary.slug);
@@ -534,6 +576,7 @@ export async function selectEcu(summary: EcuSummary): Promise<void> {
     app.requestCount = loadedEcu.requests.size;
     app.dataCount = loadedEcu.data.size;
     app.testerPresent = testerPresentFrame(loadedEcu);
+    app.dtcRequest = dtcReadRequestName(loadedEcu) ?? null;
     await primeOverlay();
     if (token !== selectionToken) return;
     app.ecuPhase = "ready";
@@ -715,6 +758,98 @@ export async function openScanResult(result: ProbeResult): Promise<void> {
   const summary = database.summary(slug);
   if (summary === undefined) return;
   await selectEcu(summary);
+}
+
+let simulated: DtcLink | null = null;
+
+/**
+ * Where fault reads and clears are sent.
+ *
+ * Demo mode gets a simulated link rather than being locked out, so this panel can be
+ * built and its confirmation flow exercised without a vehicle.
+ */
+function dtcLink(): DtcLink | null {
+  if (driver !== null) return driver;
+  if (ecu === null) return null;
+  // Kept for the life of the selection rather than rebuilt per call: the simulated
+  // link remembers an erase, and a fresh one each time would forget it and keep
+  // reporting the faults that were just cleared.
+  simulated ??= simulatedDtcLink(ecu);
+  return simulated;
+}
+
+/** Reading faults is safe on any vehicle, so it needs no gate. */
+export async function readFaults(): Promise<void> {
+  const link = dtcLink();
+  if (link === null || ecu === null || app.dtcReading) return;
+  app.dtcReading = true;
+  app.dtcNotice = null;
+  try {
+    const outcome = await withAdapterLock(() => readDtcs(link, ecu as LoadedEcu));
+    if (!outcome.ran) {
+      app.dtcNotice = "Another ddtx tab is using this adapter.";
+      return;
+    }
+    app.dtc = outcome.value ?? null;
+  } catch (cause) {
+    app.dtcNotice = cause instanceof Error ? cause.message : String(cause);
+  } finally {
+    app.dtcReading = false;
+  }
+}
+
+/**
+ * Erase stored faults.
+ *
+ * Irreversible and it discards evidence, so on a vehicle it goes through the same
+ * gates as a button press and names the frame in the prompt. Demo mode is exempt for
+ * the same reason button presses are: there is nothing to protect.
+ */
+export async function clearFaults(): Promise<void> {
+  const link = dtcLink();
+  if (link === null || ecu === null || app.dtcClearing) return;
+
+  const live = isLive();
+  if (live) {
+    const gate = checkWriteGates({ writesEnabled: app.writesEnabled, live: true });
+    if (!gate.allowed) {
+      app.lastRefusal = gate.reason ?? "Not allowed.";
+      return;
+    }
+    const named = dtcClearRequestName(ecu);
+    const how = named ?? "the generic 14 FF 00 request";
+    if (
+      !globalThis.confirm(
+        `Erase every stored fault code in ${ecu.def.ecuname} using ${how}?\n\n` +
+          "This cannot be undone, and it destroys the record of what went wrong.",
+      )
+    ) {
+      app.lastRefusal = "Cancelled.";
+      return;
+    }
+  }
+
+  app.dtcClearing = true;
+  app.dtcClearNotice = null;
+  try {
+    const outcome = await withAdapterLock(() => clearDtcs(link, ecu as LoadedEcu));
+    if (!outcome.ran) {
+      app.dtcClearNotice = "Another ddtx tab is using this adapter.";
+      return;
+    }
+    const result = outcome.value;
+    if (result === undefined) return;
+    app.dtcClearNotice = result.cleared
+      ? `Cleared with ${result.frame}${result.usedFallback ? " (generic request)" : ""}.`
+      : `Not cleared: ${result.detail ?? "no answer"}.`;
+    app.lastRefusal = null;
+    // Re-read, because "cleared" is a claim until the ECU answers with nothing.
+    if (result.cleared) await readFaults();
+  } catch (cause) {
+    app.dtcClearNotice = cause instanceof Error ? cause.message : String(cause);
+  } finally {
+    app.dtcClearing = false;
+  }
 }
 
 export async function disconnect(): Promise<void> {

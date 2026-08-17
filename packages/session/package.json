@@ -22,6 +22,7 @@
     "@ddtx/codec": "workspace:*",
     "@ddtx/core": "workspace:*",
     "@ddtx/db": "workspace:*",
-    "@ddtx/elm": "workspace:*"
+    "@ddtx/elm": "workspace:*",
+    "@ddtx/link": "workspace:*"
   }
 }

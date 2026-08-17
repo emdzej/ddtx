@@ -21,9 +21,18 @@ import {
   type ElmTransport,
 } from "@ddtx/elm";
 import { EcuDatabase, type DbSource, type LoadedEcu } from "@ddtx/db";
-import { requiredResponseBytes } from "@ddtx/link";
 import { ScreenRuntime } from "@ddtx/screens";
-import { attachEcu, describeAttachment, scanAll, scanCan, scanKline } from "@ddtx/session";
+import {
+  attachEcu,
+  clearDtcs,
+  describeAttachment,
+  dtcClearRequestName,
+  readDtcs,
+  scanAll,
+  scanCan,
+  scanKline,
+  simulatedReplies,
+} from "@ddtx/session";
 import { listPorts, looksLikeAdapter, NodeSerialTransport } from "./nodeSerial.js";
 import { formatStats, latencyFloorHint, measure, STATS_HEADER } from "./bench.js";
 
@@ -56,6 +65,10 @@ const USAGE = `ddtx — ELM327 diagnostics from the terminal
       over 100 addresses where a given vehicle has a few dozen.
       --bus defaults to both, which matters — Master II is 15 K-line ECUs to 2
       on CAN, so a CAN-only sweep would miss most of it.
+
+  ddtx dtc     --port <path> --ecu <slug> [--clear] [--tree <dir>]
+      Read stored trouble codes. --clear erases them, which is irreversible and
+      asks first.
 
   ddtx screens --ecu <slug> [--tree <dir>]
       List an ECU's screens. Needs no adapter.
@@ -96,48 +109,6 @@ function parseArgs(argv: readonly string[]): Args {
   return { command: positional[0] ?? "", flags, booleans };
 }
 
-/**
- * Replies for `--mock` built from the ECU's own definitions.
- *
- * Without this, `read --mock` shows NO DATA for everything: the transport-level
- * mock only knows the handful of frames hard-coded above, not this ECU's requests.
- * Using the database's stored `replybytes`, extended to the length the fields
- * need, is the same rule demo mode applies — so `read --mock` exercises the whole
- * stack and is a fair rehearsal for the real thing.
- *
- * Deterministic filler, not random: a rehearsal should give the same answer twice.
- */
-function repliesFromEcu(ecu: LoadedEcu): Record<string, string> {
-  const map: Record<string, string> = {};
-
-  for (const request of ecu.requests.values()) {
-    const sent = (request.def.sentbytes ?? "").toUpperCase();
-    if (sent.length === 0) continue;
-
-    const canned = (request.def.replybytes ?? "").toUpperCase();
-    const needed = requiredResponseBytes(request);
-    // Lead with the positive-response SID when nothing is stored: `firstbyte` is
-    // 1-based including it, and some screens read byte 1 directly.
-    const sid = ((Number.parseInt(sent.slice(0, 2), 16) + 0x40) & 0xff)
-      .toString(16)
-      .toUpperCase()
-      .padStart(2, "0");
-    let reply = canned.length > 0 ? canned : sid;
-
-    // Filler derived from the request name, so a screen looks the same each run.
-    let seed = 0x811c9dc5;
-    for (const ch of request.def.name) seed = Math.imul(seed ^ ch.charCodeAt(0), 0x01000193);
-    while (reply.length / 2 < needed) {
-      seed = (Math.imul(seed, 48271) + 11) >>> 0;
-      reply += ((seed >>> 16) & 0xff).toString(16).toUpperCase().padStart(2, "0");
-    }
-
-    // First definition wins, matching the original's dict-keyed lookup.
-    map[sent] ??= reply;
-  }
-  return map;
-}
-
 /** Read the tree off local disk — the CLI has no HTTP server to go through. */
 function fileSource(root: string): DbSource {
   return {
@@ -173,20 +144,24 @@ function makeTransport(args: Args, shape: MockShape = {}): ElmTransport {
         : { stnVersion: args.flags.get("mock-stn") }),
       latencyMs: Number(args.flags.get("mock-latency") ?? "0"),
       onFrame: (() => {
-        const answer = respondWithPayload({
-          "2110": "610BB87801",
-          "2180": "6180" + "AA".repeat(24),
-          "1003": "5003",
-          "10C0": "50C0",
-          "3E": "7E",
-          // The bench's multi-frame request. Keyed on the request as reassembled,
-          // with no padding: the driver pads nothing on the way out.
-          [BENCH_LONG_REQUEST]: "6E0100",
-          ...(shape.replies ?? {}),
-        });
+        const isotp = shape.isotp !== false;
+        const answer = respondWithPayload(
+          {
+            "2110": "610BB87801",
+            "2180": "6180" + "AA".repeat(24),
+            "1003": "5003",
+            "10C0": "50C0",
+            "3E": "7E",
+            // The bench's multi-frame request. Keyed on the request as reassembled,
+            // with no padding: the driver pads nothing on the way out.
+            [BENCH_LONG_REQUEST]: "6E0100",
+            ...(shape.replies ?? {}),
+          },
+          { isotp },
+        );
         // Wrapped so a multi-frame request is answered once, after its last
-        // frame, as a real adapter does.
-        return shape.isotp === false ? answer : reassemblingHandler(answer);
+        // frame, as a real adapter does. Only meaningful on CAN.
+        return isotp ? reassemblingHandler(answer) : answer;
       })(),
     });
   }
@@ -402,7 +377,7 @@ async function cmdRead(args: Args): Promise<void> {
 
   const protocolName = ecu.def.obd.protocol.toUpperCase();
   const transport = makeTransport(args, {
-    replies: repliesFromEcu(ecu),
+    replies: simulatedReplies(ecu),
     isotp: protocolName === "CAN",
   });
   const driver = makeDriver(transport, args);
@@ -520,6 +495,104 @@ async function cmdScan(args: Args): Promise<void> {
   }
 }
 
+async function cmdDtc(args: Args): Promise<void> {
+  const slug = args.flags.get("ecu");
+  if (slug === undefined) fail("--ecu <slug> is required");
+
+  const db = await EcuDatabase.open(fileSource(args.flags.get("tree") ?? "data/tree"));
+  const ecu = await db.loadEcu(slug);
+
+  const transport = makeTransport(args, {
+    replies: simulatedReplies(ecu),
+    isotp: ecu.def.obd.protocol.toUpperCase() === "CAN",
+  });
+  const driver = makeDriver(transport, args);
+  await transport.open();
+
+  try {
+    await driver.identify();
+    const attachment = await attachEcu(driver, ecu);
+    process.stdout.write(`${ecu.def.ecuname} — ${describeAttachment(attachment)}\n\n`);
+
+    const result = await readDtcs(driver, ecu, { sessionCommand: "10C0" });
+
+    switch (result.outcome) {
+      case "unsupported":
+        process.stdout.write("This ECU's file describes no way to read trouble codes.\n");
+        return;
+      case "rejected":
+        process.stdout.write(`The ECU refused: ${result.detail ?? "no reason given"}\n`);
+        return;
+      case "unreadable":
+        process.stdout.write(`Could not read the response: ${result.detail ?? ""}\n`);
+        process.stdout.write(`  raw: ${result.raw ?? ""}\n`);
+        return;
+      case "none":
+        process.stdout.write("No stored trouble codes.\n");
+        break;
+      case "ok":
+        process.stdout.write(
+          `${result.declared} code(s) declared, ${result.records.length} read` +
+            ` via ${result.requestName}\n\n`,
+        );
+        for (const record of result.records) {
+          process.stdout.write(`  DTC #${record.index + 1}\n`);
+          for (const field of record.fields) {
+            const shown = field.labelled ? field.value : `${field.value} [0x${field.hex}]`;
+            process.stdout.write(`      ${field.name.slice(0, 42).padEnd(44)} ${shown}\n`);
+          }
+        }
+        break;
+    }
+
+    if (!args.booleans.has("clear")) {
+      if (result.outcome === "ok") {
+        process.stdout.write("\nPass --clear to erase them.\n");
+      }
+      return;
+    }
+
+    // Erasing is irreversible, so it asks — the CLI's equivalent of the app's
+    // confirmation gate.
+    const clearVia = dtcClearRequestName(ecu);
+    process.stdout.write(
+      `\nAbout to erase the stored codes using ` +
+        `${clearVia ?? `the generic ${"14FF00"} (this ECU names no clear request)`}.\n`,
+    );
+    if (!(await confirm("Erase them? [y/N] "))) {
+      process.stdout.write("Left alone.\n");
+      return;
+    }
+
+    const cleared = await clearDtcs(driver, ecu, { sessionCommand: "10C0" });
+    process.stdout.write(
+      cleared.cleared
+        ? `Cleared, using ${cleared.frame}${cleared.usedFallback ? " (generic frame)" : ""}.\n`
+        : `Clear failed: ${cleared.detail ?? "no reason given"}\n`,
+    );
+  } finally {
+    await transport.close();
+  }
+}
+
+/** A y/N prompt on stdin. Returns false on anything that is not a yes. */
+async function confirm(prompt: string): Promise<boolean> {
+  if (!process.stdin.isTTY) {
+    // Non-interactive: refusing is the safe default for something irreversible.
+    process.stdout.write(`${prompt}(not a terminal — refusing)\n`);
+    return false;
+  }
+  process.stdout.write(prompt);
+  return new Promise((resolve) => {
+    process.stdin.setEncoding("utf8");
+    process.stdin.once("data", (chunk) => {
+      process.stdin.pause();
+      resolve(/^y(es)?$/i.test(String(chunk).trim()));
+    });
+    process.stdin.resume();
+  });
+}
+
 /* ── entry ───────────────────────────────────────────────────────────────── */
 
 async function main(): Promise<void> {
@@ -540,6 +613,9 @@ async function main(): Promise<void> {
       return;
     case "scan":
       await cmdScan(args);
+      return;
+    case "dtc":
+      await cmdDtc(args);
       return;
     case "screens":
       await cmdScreens(args);

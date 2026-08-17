@@ -329,7 +329,52 @@ request:
 
 ---
 
-## 5. What cannot be reached from a browser
+## 5. Fault codes
+
+There is no standard DTC service here. Each ECU's file names its own request —
+`ReadDTC`, `ReadDTCInformation.ReportDTC`, `LireDefautsMemorises` and a dozen other
+spellings — and the reader matches against that list, case-insensitively, before
+falling back to nothing. It never invents a frame: an ECU with no fault request is
+reported as unsupported rather than probed with a guess.
+
+**The response is one header plus N fixed-width records.** Byte 2 is the count.
+Every field's `firstbyte` is written for the _first_ record, and each further record
+is read by sliding the window on by `shiftbytescount` bytes:
+
+```
+57 03  DB08 7F1F  215B 7BE2  C2…
+│  │   └─ record 1 ─┘ └─ record 2 …
+│  └─ 3 codes stored
+└─ positive response to 17
+```
+
+Measured over the whole database: 1,392 of 1,580 ECUs describe a readable fault
+request, stride 4 in 1,049 of them and 3 in 333. Five define no stride at all and
+carry exactly one record. 115 distinct field names appear across every record in
+the corpus.
+
+**Continuation.** Where the request declares a `MoreDTC` send byte, the same frame
+is re-sent with it set until the ECU stops answering. Two things to know:
+
+- An ELM answers `NO DATA` when there is nothing more. That is _text_, and
+  `getHexValue` voids the whole response on a single non-hex character — so it must
+  be rejected before it reaches the decoder, not appended as bytes. On CAN the
+  driver's line filter hides this; on K-line it does not.
+- **The original's continuation is broken.** `moredtcread_command` builds its frame
+  with `''.join(str(bytestosend))`, which stringifies a Python _list_ — producing
+  `"['1', '7', …]"` rather than a frame. Ours builds the frame properly, so it reads
+  codes past the first response where the Qt app cannot.
+
+**Clearing** widens the response timeout to 1500 ms first, because an ECU erasing
+its fault memory can take a while to answer and a timeout reads as failure when the
+erase actually happened. Note `AT ST` counts in 4 ms units with a one-byte argument,
+so 1500 ms is not expressible — the original silently clamps to 1020 ms and so do
+we, deliberately, rather than pretending otherwise. Where no request describes a
+clear, the generic `14 FF 00` is used and the caller is told it was a fallback.
+
+---
+
+## 6. What cannot be reached from a browser
 
 | Transport             | Why                                                      |
 | --------------------- | -------------------------------------------------------- |

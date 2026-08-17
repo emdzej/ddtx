@@ -2,7 +2,7 @@
   "name": "ddtx",
   "private": true,
   "version": "0.1.0",
-  "description": "Browser-based Renault/Dacia/Nissan ECU diagnostics \u2014 a TypeScript port of DDT4All",
+  "description": "Browser-based Renault/Dacia/Nissan ECU diagnostics — a TypeScript port of DDT4All",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "packageManager": "pnpm@10.33.1",
@@ -28,6 +28,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.1",
+    "playwright-core": "^1.62.1",
     "prettier": "^3.5.1",
     "turbo": "^2.8.10",
     "typescript": "^5.7.3",

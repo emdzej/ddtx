@@ -7,6 +7,7 @@
 -->
 <script lang="ts">
   import { projectLabel } from "@ddtx/core";
+  import Faults from "./Faults.svelte";
   import Scan from "./Scan.svelte";
   import { app, openScreen, t, untranslated } from "../lib/state.svelte.js";
 
@@ -65,6 +66,9 @@
     {#if app.ecuPhase === "loading"}
       <p class="empty">Loading definitions…</p>
     {:else}
+      <!-- Between the ECU's identity and its screens: what's wrong comes before
+           what you can look at. -->
+      <Faults />
       <nav>
         {#each app.categories as category (category.name)}
           <div class="category">

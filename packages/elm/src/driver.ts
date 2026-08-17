@@ -484,6 +484,24 @@ export class ElmDriver {
     await this.cmd("AT AT 1");
   }
 
+  /**
+   * Set the CAN response timeout, in milliseconds.
+   *
+   * `AT ST` takes units of **4 ms** in a single byte, so the range is 4–1020 ms and
+   * anything larger saturates. Port of `set_can_timeout`, which does the same
+   * division and clamp — worth knowing when asking for 1500 ms, as the DTC erase
+   * does: you get 1020.
+   */
+  async setCanTimeout(milliseconds: number): Promise<void> {
+    const units = Math.min(255, Math.max(1, Math.floor(milliseconds / 4)));
+    await this.cmd(`AT ST ${units.toString(16).toUpperCase().padStart(2, "0")}`);
+  }
+
+  /** Back to the maximum, which is what `initCan` and `setCanAddress` leave set. */
+  async resetCanTimeout(): Promise<void> {
+    await this.cmd("AT ST FF");
+  }
+
   /** `ATPC`: tell the adapter to drop the protocol. */
   async closeProtocol(): Promise<void> {
     await this.cmd("ATPC");
