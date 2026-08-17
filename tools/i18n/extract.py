@@ -59,11 +59,43 @@ IDENTIFIER = re.compile(r"^[A-Za-z0-9_.$\-/\[\]()#]+$")
 WORD = re.compile(r"[A-Za-zÀ-ÿ]{2,}")
 
 
-def classify(text):
+def learn_lexicon(authored):
+    """
+    A French/English word list learned from the authored files themselves.
+
+    Every authored entry is a French→English pair, so its key contributes French
+    vocabulary and its value English. That turns translation work already done into
+    evidence for classifying what is left, which the hand-written lists below cannot
+    do: they are short, and the database's vocabulary is not.
+
+    Held-out measurement over the 821 authored pairs (train on half, test on the
+    other half): **2.2%** of French keys are called English and **0.2%** of English
+    values are called French. Inspecting the 2.2% shows most are strings that really
+    are English in the database — "Traceability", "Restart ECU", "Bar" — and were
+    authored as near-identity translations. So the real error is lower than that.
+
+    The risk worth naming: a string wrongly called `en` is counted as covered and
+    never offered again. That is why this is only consulted where the hand lists
+    tie, and never overrides a diacritic.
+    """
+    fr, en = set(), set()
+    for entries in authored.values():
+        for source, translation in entries.items():
+            for word in WORD.findall(source):
+                fr.add(word.lower())
+            for word in WORD.findall(translation):
+                en.add(word.lower())
+    return fr, en
+
+
+def classify(text, lexicon=None):
     """`fr`, `en`, `neutral`, `unknown`, or `empty`.
 
     A heuristic, and honest about it: `unknown` means "a human should decide",
     not "translate this". It is dominated by short abbreviations.
+
+    `lexicon` is an optional `(french, english)` pair from `learn_lexicon`, used only
+    to break a tie the hand-written lists cannot.
     """
     t = text.strip()
     if not t:
@@ -71,11 +103,27 @@ def classify(text):
     words = [w.lower() for w in WORD.findall(t)]
     if not words:
         return "neutral"
+
+    # An accent settles it, and it settles it *first*: `Configuration_générale_UCH2005`
+    # is a French screen name that the identifier rule below would otherwise silence.
+    if any(c in FR_DIACRITICS for c in t):
+        return "fr"
+
     # CamelCase or dotted identifiers are UDS/AUTOSAR names, not prose.
     if IDENTIFIER.match(t) and " " not in t and re.search(r"[a-z][A-Z]|\.", t):
         return "neutral"
-    if any(c in FR_DIACRITICS for c in t):
-        return "fr"
+
+    # So are underscore-joined abbreviations — the `Dfp_LSUCDHeater0` family, ~45
+    # distinct strings in the Master II ECUs alone. But `Lecture_Defauts` is a real
+    # screen name, so the test is whether the segments are recognisable words rather
+    # than whether an underscore is present.
+    if IDENTIFIER.match(t) and " " not in t and "_" in t:
+        known = FR_WORDS | EN_WORDS
+        if lexicon is not None:
+            known = known | lexicon[0] | lexicon[1]
+        recognised = sum(1 for w in words if w in known)
+        if recognised * 2 < len(words):
+            return "neutral"
     fr = sum(1 for w in words if w in FR_WORDS)
     en = sum(1 for w in words if w in EN_WORDS)
     if fr > en:
@@ -84,6 +132,17 @@ def classify(text):
         return "en"
     if len(t) <= 4 and t.upper() == t:
         return "neutral"
+
+    # The hand lists have nothing to say. Ask what has already been translated.
+    if lexicon is not None:
+        learned_fr, learned_en = lexicon
+        fr = sum(1 for w in words if w in learned_fr)
+        en = sum(1 for w in words if w in learned_en)
+        if fr > en:
+            return "fr"
+        if en > fr:
+            return "en"
+
     return "unknown"
 
 
@@ -138,8 +197,34 @@ def collect(tree, slugs):
     return found
 
 
-def cmd_extract(tree, codes, out_path):
+def load_authored(source_dir):
+    """namespace -> {source: translation} from the authored files, notes skipped."""
+    authored = {}
+    if source_dir is None:
+        return authored
+    for namespace in NAMESPACES:
+        path = os.path.join(source_dir, f"{namespace}.json")
+        if not os.path.exists(path):
+            continue
+        authored[namespace] = {
+            k: v
+            for k, v in json.load(open(path, encoding="utf-8")).items()
+            if not k.startswith("_") and isinstance(v, str) and v.strip()
+        }
+    return authored
+
+
+def cmd_extract(tree, codes, out_path, source_dir=None):
+    """
+    What still needs a human decision, ranked by how often it is seen.
+
+    Pass `source_dir` to skip what is already authored. Without it the offer includes
+    strings that are already translated — which is worth avoiding, because the
+    ranking then sends you straight back to the work you have already done.
+    """
     slugs, index = ecus_for(tree, codes)
+    authored = load_authored(source_dir)
+    lexicon = learn_lexicon(authored) if authored else None
     found = collect(tree, slugs)
 
     print(f"{len(slugs)} ECUs for {', '.join(codes)}")
@@ -154,15 +239,25 @@ def cmd_extract(tree, codes, out_path):
         counter = found[namespace]
         if not counter:
             continue
-        classes = collections.Counter(classify(s) for s in counter)
-        # Offered = needs a human decision. `en` and `neutral` are left alone.
-        offered = {s: c for s, c in counter.items() if classify(s) in ("fr", "unknown")}
+        classes = collections.Counter(classify(s, lexicon) for s in counter)
+        # Offered = needs a human decision. `en` and `neutral` are left alone, and so
+        # is anything already authored.
+        have = authored.get(namespace, {})
+        offered = {
+            s: c
+            for s, c in counter.items()
+            if classify(s, lexicon) in ("fr", "unknown") and s not in have
+        }
         total_offered += len(offered)
         payload["namespaces"][namespace] = {
             "distinct": len(counter),
             "occurrences": sum(counter.values()),
             "offered": [
                 s for s, _ in sorted(offered.items(), key=lambda kv: (-kv[1], kv[0]))
+            ],
+            # Same order, with the counts — this is what tells you where to stop.
+            "ranked": [
+                [s, c] for s, c in sorted(offered.items(), key=lambda kv: (-kv[1], kv[0]))
             ],
         }
         print(
@@ -226,14 +321,8 @@ def cmd_coverage(tree, codes, source_dir):
     """How much of a vehicle's visible text is translated?"""
     slugs, _ = ecus_for(tree, codes)
     found = collect(tree, slugs)
-    authored = {}
-    for namespace in NAMESPACES:
-        path = os.path.join(source_dir, f"{namespace}.json")
-        if os.path.exists(path):
-            authored[namespace] = {
-                k: v for k, v in json.load(open(path, encoding="utf-8")).items()
-                if not k.startswith("_") and isinstance(v, str) and v.strip()
-            }
+    authored = load_authored(source_dir)
+    lexicon = learn_lexicon(authored) if authored else None
 
     print(f"{'namespace':12}{'distinct':>9}{'done':>7}{'%':>6}{'occurs':>9}{'occ %':>7}")
     td = tdone = to = todone = 0
@@ -245,7 +334,7 @@ def cmd_coverage(tree, codes, source_dir):
         # A string that needs no translation counts as covered: the point is what
         # a reader sees in English, not how many entries exist.
         def covered(s):
-            return s in have or classify(s) in ("en", "neutral", "empty")
+            return s in have or classify(s, lexicon) in ("en", "neutral", "empty")
         done = sum(1 for s in counter if covered(s))
         occ = sum(counter.values())
         occ_done = sum(c for s, c in counter.items() if covered(s))
@@ -266,7 +355,14 @@ def main():
     command = sys.argv[1]
     if command == "extract":
         tree, out = sys.argv[2], sys.argv[3]
-        cmd_extract(tree, sys.argv[4:], out)
+        rest = sys.argv[4:]
+        # `--source <dir>` skips what is already translated.
+        source_dir = None
+        if "--source" in rest:
+            at = rest.index("--source")
+            source_dir = rest[at + 1]
+            rest = rest[:at] + rest[at + 2 :]
+        cmd_extract(tree, rest, out, source_dir)
     elif command == "build":
         tree, locale, source_dir, out_dir = sys.argv[2:6]
         cmd_build(tree, locale, source_dir, out_dir)
