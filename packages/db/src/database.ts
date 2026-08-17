@@ -14,7 +14,7 @@ import type {
   Endianness,
   IndexEntry,
   LayoutFileDef,
-  RequestName,
+  RequestDef,
 } from "@ddtx/core";
 import { resolveDataDictionary, type BoundRequest, type ResolvedData } from "@ddtx/codec";
 import { prepareLayout, type PreparedLayout } from "./layout.js";
@@ -148,7 +148,9 @@ export class EcuDatabase {
         this.loadEcu(slug),
         readJson<LayoutFileDef>(this.source, `layout/${slug}.json`),
       ]);
-      return prepareLayout(raw, new Set(ecu.requests.keys()), new Set(ecu.data.keys()));
+      const defs = new Map<string, RequestDef>();
+      for (const [name, bound] of ecu.requests) defs.set(name, bound.def);
+      return prepareLayout(raw, defs, new Set(ecu.data.keys()));
     })();
 
     this.layoutCache.set(slug, pending);
@@ -177,16 +179,6 @@ export function getRequest(ecu: LoadedEcu, name: string): BoundRequest | undefin
     if (key.toLowerCase() === lowered) return value;
   }
   return undefined;
-}
-
-/** The data definition behind a widget, or `undefined` if it isn't bound. */
-export function getData(ecu: LoadedEcu, name: string): ResolvedData | undefined {
-  return ecu.data.get(name);
-}
-
-/** Names of the requests a set of widgets needs, deduplicated. */
-export function distinctRequests(names: Iterable<RequestName>): RequestName[] {
-  return [...new Set(names)];
 }
 
 async function readJson<T>(source: DbSource, path: string): Promise<T> {

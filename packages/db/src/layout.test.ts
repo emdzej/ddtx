@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LayoutFileDef, ScreenDef } from "@ddtx/core";
+import type { LayoutFileDef, RequestDef, ScreenDef } from "@ddtx/core";
 import { prepareLayout, requestsForScreen } from "./layout.js";
 
 const font = { name: "Arial", size: 9, bold: "0", italic: "0" };
@@ -35,7 +35,25 @@ function layoutOf(screens: Record<string, ScreenDef>, categories: Record<string,
   return { screens, categories } satisfies LayoutFileDef;
 }
 
-const requests = new Set(["Trame 10", "Reset"]);
+/**
+ * Displays may only read fields their request returns, so the fixture requests
+ * must declare them — see the `display-not-in-response` rule.
+ */
+const requests = new Map<string, RequestDef>([
+  [
+    "Trame 10",
+    {
+      name: "Trame 10",
+      deny_sds: [],
+      sentbytes: "2110",
+      receivebyte_dataitems: {
+        "Régime moteur": { firstbyte: 2 },
+        "Température eau": { firstbyte: 4 },
+      },
+    },
+  ],
+  ["Reset", { name: "Reset", deny_sds: [], sentbytes: "1400" }],
+]);
 const data = new Set(["Régime moteur", "Température eau"]);
 
 describe("prepareLayout", () => {

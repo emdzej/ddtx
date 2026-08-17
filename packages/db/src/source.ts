@@ -24,11 +24,22 @@ export interface DbSource {
  * emits, which is what turns a 352 KB definition file into ~18 KB on the wire.
  */
 export class HttpDbSource implements DbSource {
-  /** `baseUrl` may omit the trailing slash. */
+  private readonly fetchImpl: typeof fetch;
+
+  /**
+   * `baseUrl` may omit the trailing slash.
+   *
+   * `fetchImpl` is wrapped rather than stored directly. A bare `fetch` reference
+   * held as a class field gets called with the instance as its receiver, which
+   * browsers reject with "Illegal invocation" — `fetch` requires `window` (or no
+   * receiver at all). Node is more forgiving, so this only shows up in a browser.
+   */
   constructor(
     private readonly baseUrl: string,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    fetchImpl?: typeof fetch,
+  ) {
+    this.fetchImpl = fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
+  }
 
   async read(path: string): Promise<Uint8Array> {
     const url = `${this.baseUrl.replace(/\/$/, "")}/${path}`;

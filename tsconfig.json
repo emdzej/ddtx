@@ -1,9 +1,23 @@
 {
   "files": [],
   "references": [
-    { "path": "./packages/core" },
-    { "path": "./packages/codec" },
-    { "path": "./packages/db" },
-    { "path": "./tools/db-split" }
+    {
+      "path": "./packages/core"
+    },
+    {
+      "path": "./packages/codec"
+    },
+    {
+      "path": "./packages/db"
+    },
+    {
+      "path": "./packages/link"
+    },
+    {
+      "path": "./packages/screens"
+    },
+    {
+      "path": "./tools/db-split"
+    }
   ]
 }

@@ -1,0 +1,29 @@
+{
+  "name": "@ddtx/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser client for ddtx — browse the ECU database and render screens, in demo mode or against a vehicle",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@ddtx/codec": "workspace:*",
+    "@ddtx/core": "workspace:*",
+    "@ddtx/db": "workspace:*",
+    "@ddtx/link": "workspace:*",
+    "@ddtx/screens": "workspace:*"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@tsconfig/svelte": "^5.0.4",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
+  }
+}

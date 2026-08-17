@@ -28,6 +28,7 @@ import type {
   LabelWidget,
   LayoutFileDef,
   Rect,
+  RequestDef,
   RequestName,
   ScreenDef,
   ScreenName,
@@ -36,13 +37,23 @@ import type {
 
 /** A value readout or entry field whose references have been checked. */
 export interface PreparedWidget {
+  /**
+   * Stable within a loaded layout, e.g. `display#3`. Widgets carry no identity
+   * of their own in the database, and captions repeat, so the UI needs
+   * something to key state and value maps on.
+   */
+  id: string;
   kind: "display" | "input";
   rect: Rect;
   color: string;
   fontcolor: string;
   font: FontDef;
-  /** Width of the value half, in twips. */
-  valueWidth: number;
+  /**
+   * Width of the **caption** half, in twips; the value half gets
+   * `rect.width - captionWidth`. Named `width` in the database, which reads as
+   * if it sized the value — it doesn't (`display_widget.py:127`).
+   */
+  captionWidth: number;
   /** Verified to exist in the ECU's `requests`. */
   request: RequestName;
   /**
@@ -88,6 +99,7 @@ export interface LayoutWarning {
   kind:
     | "widget-missing-request"
     | "widget-missing-data"
+    | "display-not-in-response"
     | "button-send-missing-request"
     | "presend-missing-request"
     | "category-missing-screen";
@@ -102,16 +114,21 @@ export interface PreparedLayout {
   warnings: LayoutWarning[];
 }
 
+/**
+ * @param requests Request name → definition. The definitions (not just their
+ *   names) are needed because a *display* may only read a field its request
+ *   actually returns — see the `display-not-in-response` rule below.
+ */
 export function prepareLayout(
   layout: LayoutFileDef,
-  requestNames: ReadonlySet<string>,
+  requests: ReadonlyMap<string, RequestDef>,
   dataNames: ReadonlySet<string>,
 ): PreparedLayout {
   const warnings: LayoutWarning[] = [];
   const screens = new Map<string, PreparedScreen>();
 
   for (const [name, raw] of Object.entries(layout.screens ?? {})) {
-    screens.set(name, prepareScreen(name, raw, requestNames, dataNames, warnings));
+    screens.set(name, prepareScreen(name, raw, requests, dataNames, warnings));
   }
 
   const categories: PreparedCategory[] = [];
@@ -135,15 +152,18 @@ export function prepareLayout(
 function prepareScreen(
   name: string,
   raw: ScreenDef,
-  requestNames: ReadonlySet<string>,
+  requests: ReadonlyMap<string, RequestDef>,
   dataNames: ReadonlySet<string>,
   warnings: LayoutWarning[],
 ): PreparedScreen {
   const widgets: PreparedWidget[] = [];
 
   const take = (kind: "display" | "input", list: readonly DisplayWidget[]): void => {
+    let ordinal = 0;
     for (const w of list) {
-      if (!requestNames.has(w.request)) {
+      const id = `${kind}#${ordinal++}`;
+      const request = requests.get(w.request);
+      if (request === undefined) {
         warnings.push({ kind: "widget-missing-request", screen: name, detail: w.request });
         continue;
       }
@@ -163,13 +183,27 @@ function prepareScreen(
         warnings.push({ kind: "widget-missing-data", screen: name, detail: w.text });
         continue;
       }
+
+      // A display can only show a field its request returns, so one naming a
+      // field absent from `receivebyte_dataitems` is dropped — the Qt app never
+      // creates the widget (`display_widget.py:104-112`). Inputs carry no such
+      // requirement: they are written, and are only *filled* opportunistically
+      // when some display happens to decode the same data name.
+      if (kind === "display" && bound !== null) {
+        if ((request.receivebyte_dataitems ?? {})[bound] === undefined) {
+          warnings.push({ kind: "display-not-in-response", screen: name, detail: bound });
+          continue;
+        }
+      }
+
       widgets.push({
+        id,
         kind,
         rect: w.rect,
         color: w.color,
         fontcolor: w.fontcolor,
         font: w.font,
-        valueWidth: w.width,
+        captionWidth: w.width,
         request: w.request as RequestName,
         dataName: bound,
         label: w.text,
@@ -187,7 +221,7 @@ function prepareScreen(
     messages: b.messages ?? [],
     uniquename: b.uniquename,
     send: (b.send ?? []).filter((entry) => {
-      if (requestNames.has(entry.RequestName)) return true;
+      if (requests.has(entry.RequestName)) return true;
       warnings.push({
         kind: "button-send-missing-request",
         screen: name,
@@ -198,7 +232,7 @@ function prepareScreen(
   }));
 
   const presend = (raw.presend ?? []).filter((entry) => {
-    if (requestNames.has(entry.RequestName)) return true;
+    if (requests.has(entry.RequestName)) return true;
     warnings.push({ kind: "presend-missing-request", screen: name, detail: entry.RequestName });
     return false;
   });

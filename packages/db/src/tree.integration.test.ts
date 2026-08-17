@@ -82,8 +82,9 @@ describe.skipIf(!available)("the real database tree", () => {
     // in the database does resolve — so it produces no warning below.
     expect(categories).toBe(10012);
 
-    // Bindings kept: 1,021,519 widgets less the 24 that name absent data.
-    expect(widgets).toBe(1021495);
+    // Bindings kept: 1,021,519 widgets, less the 24 naming absent data and the
+    // 6 displays reading a field their request doesn't return.
+    expect(widgets).toBe(1021489);
     // Empty-caption decorations — the case that must not be treated as an error.
     expect(decorations).toBe(1421);
 
@@ -95,6 +96,7 @@ describe.skipIf(!available)("the real database tree", () => {
 
     expect(Object.fromEntries(warnings)).toEqual({
       "widget-missing-data": 24,
+      "display-not-in-response": 6,
       "button-send-missing-request": 70,
       "presend-missing-request": 1,
     });

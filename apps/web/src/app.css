@@ -1,0 +1,109 @@
+/*
+ * Palette and type for ddtx.
+ *
+ * The screens this tool renders carry their own colours from the database, and
+ * they are unmistakably Visual Basic 6: `rgb(128,128,128)` panels, navy group
+ * boxes at `rgb(0,0,64)` with yellow `rgb(255,255,0)` captions, "MS Sans Serif"
+ * at 9.75pt. That artifact is the subject, so the chrome around it is drawn from
+ * the same navy-and-yellow the data itself uses rather than from an unrelated
+ * palette — and it stays quiet, because a loud shell would compete with the very
+ * thing it exists to display.
+ *
+ * Cool technical paper rather than warm cream: this is a fiche technique, not a
+ * reading experience, and a grey VB canvas sitting on cream looks like a mistake.
+ *
+ * Committed to a single light treatment. A garage-friendly dark mode is a real
+ * request but a half-hearted both-ways palette would weaken the specimen framing,
+ * which depends on the canvas being the brightest thing on the page.
+ */
+
+:root {
+  --ink: #10151c; /* deep blue-black — the navy in the data, darkened */
+  --ink-soft: #4a5560;
+  --ink-faint: #8b959e;
+  --paper: #e9ecef; /* cool page */
+  --card: #f7f8f9; /* raised surfaces */
+  --rule: #c9cfd5;
+  --rule-soft: #dee3e7;
+
+  --navy: #000b3a; /* the group-box navy the database uses verbatim */
+  --accent: #ffcd00; /* the marque's yellow, and the DB's own caption colour */
+  --live: #d64123; /* reserved for a real vehicle on the other end */
+  --ok: #1c7a4a;
+
+  --mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+  --sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --strip-height: 34px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Metadata is set as tracked uppercase — the labelling language of technical
+   documentation and of the instrument panels this tool talks to. */
+.eyebrow {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Every hex value in the app is monospaced and tabular. Addresses, frames, and
+   raw values get compared by eye constantly, so columns must line up. */
+.hex {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Scrollbars: thin and unobtrusive, since three columns all scroll. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
