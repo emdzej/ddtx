@@ -7,6 +7,7 @@
 -->
 <script lang="ts">
   import { projectLabel } from "@ddtx/core";
+  import Scan from "./Scan.svelte";
   import { app, openScreen, t, untranslated } from "../lib/state.svelte.js";
 
   /** Models this ECU is fitted to, named rather than coded. */
@@ -19,6 +20,12 @@
 </script>
 
 <section class="contents">
+  <!-- Above the ECU, because "what is fitted" precedes "which screen" — and it is
+       only answerable with a vehicle attached. -->
+  {#if app.linkKind === "elm"}
+    <Scan />
+  {/if}
+
   {#if app.selected === null}
     <p class="empty">Pick an ECU to see its screens.</p>
   {:else}

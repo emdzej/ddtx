@@ -23,7 +23,7 @@ import {
 import { EcuDatabase, type DbSource, type LoadedEcu } from "@ddtx/db";
 import { requiredResponseBytes } from "@ddtx/link";
 import { ScreenRuntime } from "@ddtx/screens";
-import { attachEcu, describeAttachment } from "@ddtx/session";
+import { attachEcu, describeAttachment, scanAll, scanCan, scanKline } from "@ddtx/session";
 import { listPorts, looksLikeAdapter, NodeSerialTransport } from "./nodeSerial.js";
 import { formatStats, latencyFloorHint, measure, STATS_HEADER } from "./bench.js";
 
@@ -49,6 +49,13 @@ const USAGE = `ddtx — ELM327 diagnostics from the terminal
 
   ddtx read    --port <path> --ecu <slug> --screen <name> [--tree <dir>]
       Connect to an ECU and read one screen, printing values and the bus trace.
+
+  ddtx scan    --port <path> [--vehicle <code>] [--bus can|kline|both] [--tree <dir>]
+      Sweep the bus and report which ECUs are actually fitted. Read-only.
+      Narrow it with --vehicle (a project code such as x70): a full sweep is
+      over 100 addresses where a given vehicle has a few dozen.
+      --bus defaults to both, which matters — Master II is 15 K-line ECUs to 2
+      on CAN, so a CAN-only sweep would miss most of it.
 
   ddtx screens --ecu <slug> [--tree <dir>]
       List an ECU's screens. Needs no adapter.
@@ -443,6 +450,76 @@ async function cmdRead(args: Args): Promise<void> {
   }
 }
 
+async function cmdScan(args: Args): Promise<void> {
+  const db = await EcuDatabase.open(fileSource(args.flags.get("tree") ?? "data/tree"));
+  const vehicle = args.flags.get("vehicle");
+
+  const transport = makeTransport(args);
+  const driver = makeDriver(transport, args);
+  await transport.open();
+
+  try {
+    const info = await driver.identify();
+    process.stdout.write(
+      `${info.version} on ${transport.description}\n` +
+        `sweeping ${args.flags.get("bus") ?? "both"} — ` +
+        `${vehicle === undefined ? "every mapped address" : `addresses used by ${vehicle}`}\n\n`,
+    );
+
+    const bus = args.flags.get("bus") ?? "both";
+    const sweep = bus === "can" ? scanCan : bus === "kline" ? scanKline : scanAll;
+
+    const report = await sweep(driver, db.index, {
+      ...(vehicle === undefined ? {} : { project: vehicle }),
+      onProgress: (done, total, result) => {
+        // One line per address as it goes, because a sweep is slow enough that
+        // silence would look like a hang.
+        const mark =
+          result.outcome === "identified" ? "✓" : result.outcome === "unknown-ecu" ? "?" : " ";
+        const detail =
+          result.outcome === "identified"
+            ? (result.matches[0]?.ecuname ?? "")
+            : result.outcome === "unknown-ecu"
+              ? `unrecognised — supplier ${result.identity?.supplier ?? "?"}`
+              : result.outcome;
+        process.stdout.write(
+          `[${String(done).padStart(3)}/${total}] ${mark} ${result.bus.padEnd(5)} ` +
+            `${result.address.padEnd(4)} ${(result.name ?? "").slice(0, 32).padEnd(34)} ${detail}\n`,
+        );
+      },
+    });
+
+    process.stdout.write(
+      `\n${report.found.length} of ${report.addressesProbed} addresses answered` +
+        `${report.cancelled ? " (cancelled)" : ""}, ${(report.elapsedMs / 1000).toFixed(1)} s\n\n`,
+    );
+
+    for (const result of report.found) {
+      process.stdout.write(`${result.bus.padEnd(5)} ${result.address}  ${result.name ?? "?"}\n`);
+      const id = result.identity;
+      if (id !== undefined) {
+        process.stdout.write(
+          `      reported  diag ${id.diagversion}  supplier ${id.supplier}  ` +
+            `soft ${id.soft}  version ${id.version}   (via ${result.via})\n`,
+        );
+      }
+      if (result.matches.length === 0) {
+        process.stdout.write("      no catalogue entry describes this\n");
+      }
+      for (const match of result.matches.slice(0, 4)) {
+        const how =
+          match.quality === "exact" ? "exact" : `closest, Δversion ${match.versionDelta ?? "?"}`;
+        process.stdout.write(`      ${how.padEnd(24)} ${match.ecuname}   [${match.slug}]\n`);
+      }
+      if (result.matches.length > 4) {
+        process.stdout.write(`      … and ${result.matches.length - 4} more\n`);
+      }
+    }
+  } finally {
+    await transport.close();
+  }
+}
+
 /* ── entry ───────────────────────────────────────────────────────────────── */
 
 async function main(): Promise<void> {
@@ -460,6 +537,9 @@ async function main(): Promise<void> {
       return;
     case "read":
       await cmdRead(args);
+      return;
+    case "scan":
+      await cmdScan(args);
       return;
     case "screens":
       await cmdScreens(args);

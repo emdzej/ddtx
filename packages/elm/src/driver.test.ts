@@ -320,3 +320,23 @@ describe("ElmLink", () => {
     expect(await link.request("2110", { requestName: "ignored" })).toBe("61 00 12 34 56");
   });
 });
+
+describe("MockElm settings capture", () => {
+  it("records a spaced command under the same key as an unspaced one", async () => {
+    // An ELM327 treats `ATSH745` and `AT SH 745` identically, and the driver sends
+    // the spaced form — so a test asserting on configuration needs both to land in
+    // one place.
+    const mock = new MockElm();
+    await mock.write("AT SH 745\r");
+    await mock.write("ATCRA765\r");
+    expect(mock.settings.get("ATSH")).toBe("745");
+    expect(mock.settings.get("ATCRA")).toBe("765");
+  });
+
+  it("records a flag command with no argument", async () => {
+    const mock = new MockElm();
+    await mock.write("AT CAF0\r");
+    expect(mock.settings.has("ATCAF")).toBe(true);
+    expect(mock.settings.get("ATCAF")).toBe("0");
+  });
+});

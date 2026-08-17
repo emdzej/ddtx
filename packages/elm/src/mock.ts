@@ -137,9 +137,17 @@ export class MockElm extends BufferedTransport {
 
     // Record settings so a test can assert the driver configured the adapter,
     // e.g. that CAF is off and the headers were set.
-    const match = /^(AT|ST)([A-Z]+)\s*(.*)$/.exec(upper.replace(/\s+/g, " "));
+    //
+    // The whitespace here is the fiddly part: an ELM327 accepts `ATSH745`,
+    // `AT SH 745` and `ATSH 745` as the same thing, and the driver sends the
+    // spaced form. Matching on the space-stripped command keeps one key per
+    // setting regardless of how it was written — an earlier version required a
+    // letter immediately after `AT`, so it silently recorded nothing at all for
+    // every spaced command, which is most of them.
+    const compactUpper = upper.replace(/\s+/g, "");
+    const match = /^(AT|ST)([A-Z]+)(.*)$/.exec(compactUpper);
     if (match !== null) {
-      this.settings.set(`${match[1]}${match[2]}`, (match[3] ?? "").trim());
+      this.settings.set(`${match[1]}${match[2]}`, match[3] ?? "");
     }
     return "OK";
   }

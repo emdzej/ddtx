@@ -33,6 +33,8 @@ import {
 import {
   attachEcu,
   checkWriteGates,
+  scanAll,
+  type ProbeResult,
   confirmationPrompt,
   describeAttachment,
   isReachable,
@@ -198,6 +200,13 @@ interface AppState {
   actionExchanges: Exchange[];
   /** Which button produced them. */
   actionLabel: string | null;
+
+  /** Live sweep state, when one is running or has finished. */
+  scanning: boolean;
+  scanProgress: { done: number; total: number } | null;
+  /** Only the addresses that answered — the point of a sweep. */
+  scanFound: ProbeResult[];
+  scanSummary: string | null;
 }
 
 const CATALOGUE_KEY = "ddtx.catalogueOpen";
@@ -276,6 +285,10 @@ export const app = $state<AppState>({
   badField: null,
   actionExchanges: [],
   actionLabel: null,
+  scanning: false,
+  scanProgress: null,
+  scanFound: [],
+  scanSummary: null,
 });
 
 export function setCatalogueOpen(open: boolean): void {
@@ -644,6 +657,66 @@ export async function benchLink(iterations = 200): Promise<void> {
   }
 }
 
+let scanSignal: { aborted: boolean } | null = null;
+
+/**
+ * Sweep the bus for ECUs that are actually fitted.
+ *
+ * Restricted to the selected vehicle when there is one: that turns 130-odd
+ * addresses into a few dozen, and each address that answers nothing still costs an
+ * init attempt — which on K-line is a 5-baud handshake, not a cheap re-header.
+ */
+export async function startScan(): Promise<void> {
+  const active = driver;
+  if (active === null || database === null || app.scanning) return;
+
+  const signal = { aborted: false };
+  scanSignal = signal;
+  app.scanning = true;
+  app.scanFound = [];
+  app.scanSummary = null;
+  app.scanProgress = { done: 0, total: 0 };
+
+  try {
+    const report = await scanAll(active, database.index, {
+      ...(app.project === "" ? {} : { project: app.project }),
+      signal,
+      onProgress: (done, total, result) => {
+        app.scanProgress = { done, total };
+        if (result.outcome === "identified" || result.outcome === "unknown-ecu") {
+          app.scanFound = [...app.scanFound, result];
+        }
+      },
+    });
+    app.scanSummary =
+      `${report.found.length} of ${report.addressesProbed} addresses answered in ` +
+      `${(report.elapsedMs / 1000).toFixed(1)} s${report.cancelled ? " (stopped)" : ""}`;
+  } catch (cause) {
+    app.scanSummary = cause instanceof Error ? cause.message : String(cause);
+  } finally {
+    app.scanning = false;
+    app.scanProgress = null;
+    scanSignal = null;
+    // The sweep closed the protocol, so the open screen's ECU must be re-attached
+    // before anything is read again.
+    const name = app.screen?.name;
+    if (name !== undefined) await openScreen(name);
+  }
+}
+
+export function stopScan(): void {
+  if (scanSignal !== null) scanSignal.aborted = true;
+}
+
+/** Open the ECU a sweep found, if the catalogue names one. */
+export async function openScanResult(result: ProbeResult): Promise<void> {
+  const slug = result.matches[0]?.slug;
+  if (slug === undefined || database === null) return;
+  const summary = database.summary(slug);
+  if (summary === undefined) return;
+  await selectEcu(summary);
+}
+
 export async function disconnect(): Promise<void> {
   stopAutoRefresh();
   // Writing is never left on across a connection: the next vehicle is a new
@@ -663,6 +736,8 @@ export async function disconnect(): Promise<void> {
   app.connection = "idle";
   app.connectionMessage = "Not connected";
   app.linkBench = null;
+  app.scanFound = [];
+  app.scanSummary = null;
   await reopenCurrentScreen();
 }
 

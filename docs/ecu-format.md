@@ -378,7 +378,64 @@ Real defects in the snapshot, not in any reader:
 
 ---
 
-## 9. Provenance
+## 9. Identity fields, and how a scan matches them
+
+Four fields identify an ECU, and the index stores each one in a specific form. This
+section exists because two of them are easy to read wrongly, and a wrong read means
+a scan silently matches nothing.
+
+| Field                | Form                                      | Notes                      |
+| -------------------- | ----------------------------------------- | -------------------------- |
+| `diagnostic_version` | **decimal 0–255**                         | Not hex. See below         |
+| `supplier_code`      | either a 3-char code or a full ASCII name | Both occur; see below      |
+| `soft_version`       | hex text, usually 4 chars                 | 1,025 of 1,604 are 4 chars |
+| `version`            | hex text, usually 4 chars                 | 1,651 of 2,375 are 4 chars |
+
+**`diagnostic_version` is decimal.** Across 193 distinct values, **not one contains
+`A`–`F`**, and several exceed 99 (`124`, `144`, `193`, `224`). Neither is possible if
+these were hex bytes. So an ECU reporting the byte `0x16` has diagnostic version
+`"22"`, not `"16"`.
+
+`check_ecu` converts correctly (`str(int(x, 16))`). **`identify_new` does not** — it
+takes the raw hex characters, so its UDS scan produces `"16"` where the index holds
+`"22"` and the match fails silently. The discrepancy is invisible for bytes below
+`0x0A`, where hex and decimal coincide, which is presumably why it survived. ddtx
+converts to decimal in both paths.
+
+**`supplier_code` is two different things.** 132 entries hold a 3-character code
+(`001`, `037`, `4BE`); 164 hold a name, up to 64 characters (`CONTINENTAL_ENGINE_SYSTEM`,
+`Robert Bosch GmbH, VAT ID No DE811128135, Supplier No 037`). That is not
+inconsistency — the two identification methods report different things, and the index
+accommodates both:
+
+- UDS (`22 F1 8A`) returns an ASCII **name**, matching the name entries.
+- The `2180` identity block returns a 3-byte **code**, matching the code entries.
+
+**Matching is prefix-based**, and the direction matters: the _index_ value must be a
+prefix of what the _ECU_ reported (`EcuIdent.checkWith`). A stored `soft` of `00EA`
+matches a reported `00EA80`, which is exactly what the short-form `2180` slicing
+produces — it takes three bytes where the long form takes two.
+
+`checkWith` parses both sides with `int("0x" + …, 16)`, which is wrong for a decimal
+field but _symmetrically_ wrong, so it compares correctly as long as both sides use
+the same representation. That is the real reason the representation has to match.
+
+### 9.1 Addressing: one table, not 185
+
+A functional address cannot be put on a bus; it needs a transmit/receive id pair
+(`26` → `745`/`765`, or 29-bit `18DA26F1`/`18DAF126`). `projects.json` stores this
+per vehicle project as `dnat`/`snat` and `dnat_ext`/`snat_ext`.
+
+**All 185 projects carry byte-identical tables.** Verified by hashing each project's
+four tables: exactly one distinct result, and zero conflicting entries across the
+union. So what looks like 96,200 entries is 520 — 145 11-bit pairs and 115 29-bit
+pairs. The `addressing` name table (353 entries) is uniform too.
+
+`tools/reference/gen-addressing.py` emits it once, and **refuses to run** if that
+ever stops being true, since silently picking one project's tables after a divergence
+would misaddress ECUs.
+
+## 10. Provenance
 
 The database is Renault-derived and is not ours to redistribute. ddtx ships no ECU
 data: it is pointed at a database the operator already has. The timestamps in
