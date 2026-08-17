@@ -81,6 +81,18 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/elm:
+    dependencies:
+      '@ddtx/codec':
+        specifier: workspace:*
+        version: link:../codec
+      '@ddtx/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ddtx/link':
+        specifier: workspace:*
+        version: link:../link
+
   packages/i18n: {}
 
   packages/link:

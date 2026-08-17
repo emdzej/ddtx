@@ -1,0 +1,26 @@
+{
+  "name": "@ddtx/elm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ELM327 driver \u2014 AT layer, adapter identification, protocol setup, and software ISO-TP",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ddtx/link": "workspace:*",
+    "@ddtx/codec": "workspace:*",
+    "@ddtx/core": "workspace:*"
+  }
+}

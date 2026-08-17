@@ -113,7 +113,7 @@
     <Catalogue />
     <Contents />
 
-    <div class="stage">
+    <div class="stage" class:trace-open={app.traceOpen}>
       {#if app.phase === "loading"}
         <p class="notice">Loading the catalogue…</p>
       {:else if app.phase === "error"}
@@ -262,9 +262,14 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
 
   .stage {
     display: grid;
-    grid-template-rows: minmax(0, 1fr) minmax(120px, 34%);
+    /* Closed, the trace is just its own header — so the canvas gets the rest. */
+    grid-template-rows: minmax(0, 1fr) auto;
     min-width: 0;
     min-height: 0;
+  }
+
+  .stage.trace-open {
+    grid-template-rows: minmax(0, 1fr) minmax(120px, 34%);
   }
 
   .scroller {

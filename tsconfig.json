@@ -21,6 +21,9 @@
     },
     {
       "path": "./tools/db-split"
+    },
+    {
+      "path": "./packages/elm"
     }
   ]
 }

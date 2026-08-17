@@ -8,7 +8,7 @@
 -->
 <script lang="ts">
   import type { ScreenSnapshot } from "@ddtx/screens";
-  import { t } from "../lib/state.svelte.js";
+  import { app, setTraceOpen, t } from "../lib/state.svelte.js";
 
   interface Props {
     snapshot: ScreenSnapshot | null;
@@ -17,15 +17,24 @@
   const { snapshot }: Props = $props();
 </script>
 
-<section class="trace">
-  <header>
+<section class="trace" class:open={app.traceOpen}>
+  <!-- The whole header is the toggle: it is the only control in this strip, so
+       making just a caret clickable would be a smaller target for no reason. -->
+  <button
+    class="header"
+    onclick={() => setTraceOpen(!app.traceOpen)}
+    aria-expanded={app.traceOpen}
+  >
+    <span class="caret" aria-hidden="true">{app.traceOpen ? "▾" : "▸"}</span>
     <span class="eyebrow">Bus trace</span>
     {#if snapshot !== null}
       <span class="hex">{snapshot.exchanges.length} exchanges · {snapshot.elapsedMs} ms</span>
     {/if}
-  </header>
+  </button>
 
-  {#if snapshot === null}
+  {#if !app.traceOpen}
+    <!-- nothing: the header alone is the closed state -->
+  {:else if snapshot === null}
     <p class="empty">Open a screen to see its requests.</p>
   {:else}
     <ol>
@@ -56,15 +65,32 @@
     background: var(--card);
   }
 
-  header {
+  .header {
     display: flex;
-    justify-content: space-between;
     align-items: baseline;
-    padding: 8px 14px;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 14px;
+    background: none;
+    border: 0;
+    text-align: left;
+  }
+
+  .header:hover {
+    background: var(--paper);
+  }
+
+  .trace.open .header {
     border-bottom: 1px solid var(--rule-soft);
   }
 
-  header .hex {
+  .caret {
+    color: var(--ink-faint);
+    font-size: 9px;
+  }
+
+  .header .hex {
+    margin-left: auto;
     color: var(--ink-faint);
   }
 

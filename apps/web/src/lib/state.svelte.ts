@@ -86,6 +86,12 @@ interface AppState {
    * annoyance in a tool you keep refreshing.
    */
   catalogueOpen: boolean;
+  /**
+   * Is the bus trace open? Closed by default: it answers "is this screen actually
+   * talking to the ECU", which is a question you ask occasionally, not a thing to
+   * watch — and the canvas is worth the third of the height it was taking.
+   */
+  traceOpen: boolean;
   /** `"fr"` shows the database as authored; any other locale applies an overlay. */
   locale: string;
   /** Entries in the loaded overlay, for the strip's coverage readout. */
@@ -104,12 +110,22 @@ interface AppState {
 }
 
 const CATALOGUE_KEY = "ddtx.catalogueOpen";
+const TRACE_KEY = "ddtx.traceOpen";
 
-function readCatalogueOpen(): boolean {
+function readFlag(key: string, fallback: boolean): boolean {
   try {
-    return globalThis.localStorage?.getItem(CATALOGUE_KEY) !== "false";
+    const stored = globalThis.localStorage?.getItem(key);
+    return stored === null || stored === undefined ? fallback : stored === "true";
   } catch {
-    return true;
+    return fallback;
+  }
+}
+
+function writeFlag(key: string, value: boolean): void {
+  try {
+    globalThis.localStorage?.setItem(key, String(value));
+  } catch {
+    /* private mode, or storage disabled — the toggle still works this session */
   }
 }
 
@@ -149,7 +165,8 @@ export const app = $state<AppState>({
   autoRefresh: false,
   inspect: false,
   zoom: 100,
-  catalogueOpen: readCatalogueOpen(),
+  catalogueOpen: readFlag(CATALOGUE_KEY, true),
+  traceOpen: readFlag(TRACE_KEY, false),
   locale: "fr",
   overlaySize: 0,
   overlayVersion: 0,
@@ -158,11 +175,12 @@ export const app = $state<AppState>({
 
 export function setCatalogueOpen(open: boolean): void {
   app.catalogueOpen = open;
-  try {
-    globalThis.localStorage?.setItem(CATALOGUE_KEY, String(open));
-  } catch {
-    /* private mode, or storage disabled — the toggle still works this session */
-  }
+  writeFlag(CATALOGUE_KEY, open);
+}
+
+export function setTraceOpen(open: boolean): void {
+  app.traceOpen = open;
+  writeFlag(TRACE_KEY, open);
 }
 
 let database: EcuDatabase | null = null;
@@ -171,6 +189,17 @@ let layout: PreparedLayout | null = null;
 let runtime: ScreenRuntime | null = null;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let overlay = Overlay.none();
+
+/**
+ * Which selection is current.
+ *
+ * Bumped on every `selectEcu`, and checked again after each await inside it. Two
+ * fetches plus overlay priming means a slow earlier selection can finish *after* a
+ * newer one — and without this guard its request and value counts would overwrite
+ * the ECU actually on screen, leaving the header permanently describing something
+ * else.
+ */
+let selectionToken = 0;
 
 /**
  * Translate a database string for display.
@@ -334,6 +363,7 @@ export function applyFilters(): void {
 
 export async function selectEcu(summary: EcuSummary): Promise<void> {
   if (database === null) return;
+  const token = ++selectionToken;
   stopAutoRefresh();
   app.selected = summary;
   app.ecuPhase = "loading";
@@ -349,16 +379,24 @@ export async function selectEcu(summary: EcuSummary): Promise<void> {
   app.testerPresent = null;
 
   try {
-    ecu = await database.loadEcu(summary.slug);
-    layout = await database.loadLayout(summary.slug);
-    app.categories = layout.categories;
-    app.layoutWarnings = layout.warnings.length;
-    app.requestCount = ecu.requests.size;
-    app.dataCount = ecu.data.size;
-    app.testerPresent = testerPresentFrame(ecu);
+    const loadedEcu = await database.loadEcu(summary.slug);
+    const loadedLayout = await database.loadLayout(summary.slug);
+    // Someone selected a different ECU while these were in flight; that
+    // selection owns the state now.
+    if (token !== selectionToken) return;
+
+    ecu = loadedEcu;
+    layout = loadedLayout;
+    app.categories = loadedLayout.categories;
+    app.layoutWarnings = loadedLayout.warnings.length;
+    app.requestCount = loadedEcu.requests.size;
+    app.dataCount = loadedEcu.data.size;
+    app.testerPresent = testerPresentFrame(loadedEcu);
     await primeOverlay();
+    if (token !== selectionToken) return;
     app.ecuPhase = "ready";
   } catch (cause) {
+    if (token !== selectionToken) return;
     app.ecuPhase = "error";
     app.error = cause instanceof Error ? cause.message : String(cause);
   }
