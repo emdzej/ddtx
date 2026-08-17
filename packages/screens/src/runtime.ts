@@ -11,8 +11,8 @@
  *
  *  - one request per *distinct* request name, not per widget — screens commonly
  *    carry 37 displays over a handful of requests, and one in the database has
- *    169 widgets fed by 3 requests, so the naive approach would multiply bus
- *    traffic by more than an order of magnitude;
+ *    169 widgets — 168 displays and one input — fed by just 2 polled requests, so
+ *    the naive approach would multiply bus traffic by two orders of magnitude;
  *  - **only displays are polled.** Inputs are filled in as a side effect: when a
  *    display decodes data name X, any input bound to X takes that value
  *    (`param_widget.py:1204-1220`). An input whose data name no display fetches

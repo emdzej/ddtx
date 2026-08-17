@@ -547,8 +547,8 @@ export function stnFirmwareAtLeast(
 /**
  * UART receive buffer, which caps how much the adapter can return at once.
  *
- * STN1xxx parts have 512 bytes and STN2xxx 1024; a plain ELM327 is far smaller,
- * and 256 is the safe assumption.
+ * STN1xxx parts report 511 bytes and STN2xxx 1023 (`0x1ff` / `0x3ff`, as
+ * `elm.py:496`); a plain ELM327 is far smaller, and 256 is the safe assumption.
  */
 export function uartBufferFor(stnVersion: string | undefined): number {
   if (stnVersion === undefined) return 0x100;

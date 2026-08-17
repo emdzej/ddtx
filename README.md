@@ -8,10 +8,19 @@ Status: **demo mode works.** Browse all 1,580 ECUs and render any of their 39,66
 screens, with values replayed from the database. Nothing talks to a vehicle yet —
 that waits on the ELM327 driver.
 
-- [`docs/plan.md`](docs/plan.md) — feasibility analysis, architecture, roadmap.
-  Read this first; it records why each decision was made and what was measured.
-- [`docs/i18n-overlay.md`](docs/i18n-overlay.md) — translation overlay design
-  (the ECU database is in French and its strings double as primary keys).
+Documentation is in [`docs/`](docs/README.md):
+
+- [`architecture.md`](docs/architecture.md) — how it works, following one value to
+  the screen and one click to the bus. **Start here.**
+- [`ecu-format.md`](docs/ecu-format.md) — reference for the ECU database format,
+  measured over all 1,580 ECUs, including its quirks and data faults. No such
+  reference exists upstream.
+- [`protocols.md`](docs/protocols.md) — ISO-TP framing, the AT sequences and why,
+  K-line init modes, and what a browser cannot reach.
+- [`plan.md`](docs/plan.md) — why the port is shaped this way: feasibility,
+  the reuse audit and its licensing conclusion, ranked risks, roadmap.
+- [`i18n-overlay.md`](docs/i18n-overlay.md) — the translation overlay, and why the
+  database's strings being its primary keys makes it non-obvious.
 
 ## Running it
 

@@ -1,12 +1,18 @@
 # Translation overlay
 
-The ECU database ships mostly-French display text, but its strings are *also*
+The ECU database ships mostly-French display text, but its strings are _also_
 its primary keys, so translation has to be an overlay that never touches the
 original files. This document fixes the key scheme, the resolution order, the
 delivery format, and the traps.
 
-All numbers are from a full pass over all 1,581 ECU files and 1,580 layouts in
-the 2019 snapshot (`tools/i18n-extract` reproduces them).
+All numbers are from a full pass over all 1,580 ECU definitions and their
+layouts in the 2019 snapshot. `tools/i18n/extract.py` reproduces them:
+
+```sh
+python3 tools/i18n/extract.py extract  data/tree /tmp/out.json x70 x70Ph3
+python3 tools/i18n/extract.py build    data/tree en i18n/source/en i18n/en
+python3 tools/i18n/extract.py coverage data/tree i18n/source/en x70 x70Ph3
+```
 
 ---
 
@@ -39,22 +45,22 @@ uses the original string always.
 Distinct strings classified by language (509,076 distinct, 10,229,810
 occurrences):
 
-| Surface | Distinct | French | English | Neutral | Unclassified |
-|---|---:|---:|---:|---:|---:|
-| `data.name` | 248,320 | 9.9% | 29.5% | 30.5% | 30.2% |
-| `widget.text` (→ `data`) | 113,998 | 14.2% | 23.5% | 32.0% | 30.4% |
-| `data.list.item` | 101,299 | 12.7% | 38.2% | 10.8% | 38.3% |
-| `request.name` | 69,718 | 4.7% | 31.1% | 47.5% | 16.7% |
-| `label.text` | 59,232 | 9.2% | 27.4% | 18.5% | 44.9% |
-| `data.comment` | 46,803 | 27.1% | 31.1% | 12.0% | 29.8% |
-| `device.data` | 33,915 | 21.4% | 31.4% | 13.8% | 33.4% |
-| `device.name` | 23,266 | 11.9% | 38.6% | 8.6% | 40.9% |
-| `button.text` | 8,726 | 16.7% | 56.8% | 6.3% | 20.2% |
-| `screen.name` | 6,885 | 16.2% | 25.9% | 10.0% | 47.9% |
-| `category.name` | 1,202 | 8.7% | 15.0% | 18.5% | 57.8% |
-| `data.unit` | 834 | 1.6% | 5.5% | 31.5% | 61.4% |
-| `button.message` | 329 | 50.2% | 26.1% | 1.8% | 21.6% |
-| **All** | **509,076** | **11.6%** | **32.1%** | **25.2%** | **31.1%** |
+| Surface                  |    Distinct |    French |   English |   Neutral | Unclassified |
+| ------------------------ | ----------: | --------: | --------: | --------: | -----------: |
+| `data.name`              |     248,320 |      9.9% |     29.5% |     30.5% |        30.2% |
+| `widget.text` (→ `data`) |     113,998 |     14.2% |     23.5% |     32.0% |        30.4% |
+| `data.list.item`         |     101,299 |     12.7% |     38.2% |     10.8% |        38.3% |
+| `request.name`           |      69,718 |      4.7% |     31.1% |     47.5% |        16.7% |
+| `label.text`             |      59,232 |      9.2% |     27.4% |     18.5% |        44.9% |
+| `data.comment`           |      46,803 |     27.1% |     31.1% |     12.0% |        29.8% |
+| `device.data`            |      33,915 |     21.4% |     31.4% |     13.8% |        33.4% |
+| `device.name`            |      23,266 |     11.9% |     38.6% |      8.6% |        40.9% |
+| `button.text`            |       8,726 |     16.7% |     56.8% |      6.3% |        20.2% |
+| `screen.name`            |       6,885 |     16.2% |     25.9% |     10.0% |        47.9% |
+| `category.name`          |       1,202 |      8.7% |     15.0% |     18.5% |        57.8% |
+| `data.unit`              |         834 |      1.6% |      5.5% |     31.5% |        61.4% |
+| `button.message`         |         329 |     50.2% |     26.1% |      1.8% |        21.6% |
+| **All**                  | **509,076** | **11.6%** | **32.1%** | **25.2%** |    **31.1%** |
 
 Only ~12% of distinct strings are confidently French. A third are already
 English — much of it UDS-standard (`DTCStatus.testFailedSinceLastClear`,
@@ -77,28 +83,34 @@ required first stage of extraction, not a nicety.
 ## 3. Key scheme: content-hashed and namespaced
 
 ```
-key = <namespace> ":" base32(sha256(NFC(source))) [0..12]
+key = <namespace> ":" sha256(NFC(source)) as hex, first 16 chars
 ```
+
+16 hex characters is 64 bits — ample for ~509k distinct strings, and compact
+enough that a bundle stays small. Implemented in `packages/i18n/src/keys.ts`. The
+Python builder in `tools/i18n/extract.py` must produce byte-identical keys, and
+`parity.test.ts` pins that against the real built bundle — a divergence there
+throws nothing, it just makes every translation silently stop resolving.
 
 **Content-hashed, not path-based.** Reuse across the DB averages **20.1×** — a
 path key like `ecu/CGW_DDT_6_2/screens/Infos Moteur/displays[3]/text` would need
 10.2M entries to cover what 509k content keys cover. Paths are also index-based
-and so break on any re-export, whereas the strings *are* stable identifiers by
+and so break on any re-export, whereas the strings _are_ stable identifiers by
 construction (they're dict keys). And since the DB is a frozen 2019 snapshot,
 path stability buys nothing that content hashing doesn't.
 
 **Namespace follows the reference target, not the syntactic location.** This is
 what makes coverage compound:
 
-| Namespace | Covers |
-|---|---|
-| `data` | `data{}` keys, `*_dataitems` keys, `displays[].text`, `inputs[].text` |
-| `request` | `requests[].name`, `displays[].request`, `send[].RequestName`, `presend[]` |
-| `screen` | `screens{}` keys and `categories[]` members |
-| `category` | `categories{}` keys |
-| `device` / `deviceData` | DTC device names / failure-flag names |
-| `list` | `data.lists` values |
-| `unit`, `comment`, `label`, `button`, `message` | display-only surfaces |
+| Namespace                                       | Covers                                                                     |
+| ----------------------------------------------- | -------------------------------------------------------------------------- |
+| `data`                                          | `data{}` keys, `*_dataitems` keys, `displays[].text`, `inputs[].text`      |
+| `request`                                       | `requests[].name`, `displays[].request`, `send[].RequestName`, `presend[]` |
+| `screen`                                        | `screens{}` keys and `categories[]` members                                |
+| `category`                                      | `categories{}` keys                                                        |
+| `device` / `deviceData`                         | DTC device names / failure-flag names                                      |
+| `list`                                          | `data.lists` values                                                        |
+| `unit`, `comment`, `label`, `button`, `message` | display-only surfaces                                                      |
 
 Translating one `data` entry therefore fixes the `data{}` key, every dataitem
 reference, and all 113,998 widget captions at once. Namespacing also stops
@@ -117,19 +129,22 @@ Same string, different meaning by context — so keys may be scoped, most
 specific winning:
 
 ```
-1.  ecu:<ecuFile>  ›  <ns>:<hash>     per-ECU override
-2.  group:<group>  ›  <ns>:<hash>     per ECU group ("Injection", "ABS", …)
-3.                    <ns>:<hash>     global, namespaced   ← the common case
-4.                    *:<hash>        namespace-agnostic (units, ON/OFF)
-5.                    source string    French passthrough
+1.  ecu:<slug>/<ns>:<hash>      per-ECU override
+2.  group:<group>/<ns>:<hash>   per ECU group ("Injection", "ABS", …)
+3.  <ns>:<hash>                 global, namespaced   ← the common case
+4.  the source string           untranslated passthrough
 ```
+
+An earlier draft also had a namespace-agnostic `*:<hash>` step. It is not
+implemented: namespaces exist precisely so `"Etat"` as a unit and `"Etat"` as a
+data name can differ, and a wildcard tier would quietly undo that.
 
 Scopes 1 and 2 are expected to stay near-empty; they exist so a bad
 disambiguation can be fixed without forking the global entry. `group` comes
 from `db.json`, so it's known before the ECU file is fetched.
 
-A dev-mode flag must mark every string that fell through to step 5, otherwise
-missing coverage is invisible.
+A dev-mode flag marks every string that fell through to the last step —
+**Mark gaps** in the toolbar — because otherwise missing coverage is invisible.
 
 ---
 
@@ -165,7 +180,7 @@ label without a glossary is noticeably worse.
 
 ### 6.1 Enum labels are write-path identifiers
 
-`EcuRequest.build_data_stream` reverse-looks-up the *label* to recover the
+`EcuRequest.build_data_stream` reverse-looks-up the _label_ to recover the
 integer to send (`ecu_request.py:175-176`):
 
 ```python
@@ -199,8 +214,9 @@ Bundle values carry an origin flag so a re-run of MT never overwrites reviewed
 human text:
 
 ```jsonc
-{ "data:MFRGGZDF": "Engine speed",              // string  = human/reviewed
-  "data:MZXW6YTB": ["Canister purge valve", 1]  // [text, 1] = machine-translated
+{
+  "data:MFRGGZDF": "Engine speed", // string  = human/reviewed
+  "data:MZXW6YTB": ["Canister purge valve", 1], // [text, 1] = machine-translated
 }
 ```
 

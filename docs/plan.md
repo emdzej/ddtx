@@ -11,7 +11,7 @@ where something is unmeasured it says so.
 Feasible, and materially easier than the INPA port (`bimmerz/inpax`) was.
 
 The reason is architectural: **DDT4All has no scripting language.** INPA needed
-a bytecode parser, disassembler, and interpreter. DDT4All's ECU database *is*
+a bytecode parser, disassembler, and interpreter. DDT4All's ECU database _is_
 the program — declarative request templates, bit-field decode rules, and
 absolutely-positioned screen definitions. There is nothing to interpret.
 
@@ -23,15 +23,15 @@ but the screen model is far smaller than its LOC count suggests (§4).
 
 ## 2. What DDT4All actually is
 
-| Layer | LOC | Verdict |
-|---|---|---|
-| `core/ecu` — DB load, request build, bit/scale codec, autoident scan | 2,041 | **Mechanical port.** Pure string/bit math, zero I/O |
-| `core/elm` — ELM327 driver, serial port, ISO-TP framing | 2,747 | **Rewrite as async.** Blocking `expect()` → promise reader. The hard part |
-| `core/parameters/helpers.py` — XML→JSON DB conversion | 472 | Build-time tool; port to a Node CLI or leave in Python |
-| `core/doip` + `core/usbdevice` | 746 | **Cannot run in a browser** (raw TCP, libusb) |
-| `options.py` module globals | 315 | Becomes settings store + injected session |
-| `ui/*` PyQt5 | 7,773 | **Rewrite.** ~2.5k is the runtime screen renderer (needed), 2.0k the DB editor (defer), 2.9k window chrome |
-| `plugins/*` (14 files) | 1,685 | Defer — scripted request sequences, easy later |
+| Layer                                                                | LOC   | Verdict                                                                                                    |
+| -------------------------------------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------- |
+| `core/ecu` — DB load, request build, bit/scale codec, autoident scan | 2,041 | **Mechanical port.** Pure string/bit math, zero I/O                                                        |
+| `core/elm` — ELM327 driver, serial port, ISO-TP framing              | 2,747 | **Rewrite as async.** Blocking `expect()` → promise reader. The hard part                                  |
+| `core/parameters/helpers.py` — XML→JSON DB conversion                | 472   | Build-time tool; port to a Node CLI or leave in Python                                                     |
+| `core/doip` + `core/usbdevice`                                       | 746   | **Cannot run in a browser** (raw TCP, libusb)                                                              |
+| `options.py` module globals                                          | 315   | Becomes settings store + injected session                                                                  |
+| `ui/*` PyQt5                                                         | 7,773 | **Rewrite.** ~2.5k is the runtime screen renderer (needed), 2.0k the DB editor (defer), 2.9k window chrome |
+| `plugins/*` (14 files)                                               | 1,685 | Defer — scripted request sequences, easy later                                                             |
 
 Data model, all of it directly representable in TypeScript:
 
@@ -60,12 +60,12 @@ session object. Trivial change, touches everything.
 `data/ecu.zip` — 104.6 MB compressed, **1.278 GB uncompressed**, 3,749 files,
 ~12:1 compression.
 
-| Part | Count | Uncompressed | Avg | Max |
-|---|---|---|---|---|
-| `db.json` index | 1 | 1.5 MB | — | — |
-| ECU definitions `.json` | 1,581 | 543 MB | 352 KB | 3.7 MB |
-| Screen layouts `.layout` | 1,580 | 672 MB | 436 KB | 5.4 MB |
-| Images `.gif` | 582 | 3.4 MB | — | — |
+| Part                     | Count | Uncompressed | Avg    | Max    |
+| ------------------------ | ----- | ------------ | ------ | ------ |
+| `db.json` index          | 1     | 1.5 MB       | —      | —      |
+| ECU definitions `.json`  | 1,581 | 543 MB       | 352 KB | 3.7 MB |
+| Screen layouts `.layout` | 1,580 | 672 MB       | 436 KB | 5.4 MB |
+| Images `.gif`            | 582   | 3.4 MB       | —      | —      |
 
 1,580 indexed ECUs — **CAN 1,363, KWP2000 195, ISO8 21**, one blank — across 171
 groups and 140 vehicle projects. Per ECU: avg 393 requests / 1,186 data
@@ -91,10 +91,10 @@ someone opens a screen. `tools/db-split` emits `index.json` plus
 
 Measured on the wire, gzip -9, sampled over 300 ECUs:
 
-| | p50 | p90 | max | mean |
-|---|---:|---:|---:|---:|
-| `ecu/<slug>.json` | 17.6 KB | 116.3 KB | 447.2 KB | 40.6 KB |
-| `layout/<slug>.json` | 8.9 KB | 47.6 KB | 175.2 KB | 17.9 KB |
+|                       |         p50 |      p90 |      max |    mean |
+| --------------------- | ----------: | -------: | -------: | ------: |
+| `ecu/<slug>.json`     |     17.6 KB | 116.3 KB | 447.2 KB | 40.6 KB |
+| `layout/<slug>.json`  |      8.9 KB |  47.6 KB | 175.2 KB | 17.9 KB |
 | both, opening one ECU | **29.1 KB** | 157.8 KB | 532.7 KB | 58.4 KB |
 
 `index.json` is 1.1 MB raw → **118 KB gzipped**. So a cold start costs 118 KB and
@@ -110,17 +110,17 @@ max length 109.
 Every reference in the database was checked, three times independently (Python
 against the zip, `db-split`'s validator, and `@ddtx/db`'s loader — all agreeing):
 
-| Case | Count | Of | Handling |
-|---|---:|---:|---|
-| widget caption is `""` | 1,421 | 1,021,519 | **valid decoration** — draw the box, no value |
-| widget names absent data | 24 | 1,021,519 | drop, warn |
-| widget names absent request | 0 | 1,021,519 | — |
-| `button` has no `send` key | 1,367 | 104,276 | keep, renders inert |
-| `button.send` names absent request | 70 | 200,604 | drop the entry (15 buttons go inert) |
-| `presend` names absent request | 1 | 11,403 | drop the entry |
-| dataitem names absent data | 70 | 2,200,912 | ECU-level; codec throws |
-| category names absent screen | 0 | 40,179 | — |
-| category lists no screens | 55 | 10,067 | drop the dead menu node |
+| Case                               | Count |        Of | Handling                                      |
+| ---------------------------------- | ----: | --------: | --------------------------------------------- |
+| widget caption is `""`             | 1,421 | 1,021,519 | **valid decoration** — draw the box, no value |
+| widget names absent data           |    24 | 1,021,519 | drop, warn                                    |
+| widget names absent request        |     0 | 1,021,519 | —                                             |
+| `button` has no `send` key         | 1,367 |   104,276 | keep, renders inert                           |
+| `button.send` names absent request |    70 |   200,604 | drop the entry (15 buttons go inert)          |
+| `presend` names absent request     |     1 |    11,403 | drop the entry                                |
+| dataitem names absent data         |    70 | 2,200,912 | ECU-level; codec throws                       |
+| category names absent screen       |     0 |    40,179 | —                                             |
+| category lists no screens          |    55 |    10,067 | drop the dead menu node                       |
 
 The database is therefore ~99.99% internally consistent, but not perfectly, so
 the loader must prune rather than throw. The empty-caption case is the one that
@@ -202,14 +202,14 @@ but French, and it will not be caught by a French-locale test run.
 Checked against `bimmerz/ediabasx`, `bimmerz/inpax`, `bimmerz/bimmerz-core`.
 Conclusion: **copy first, extract shared packages later.**
 
-| Asset | Verdict |
-|---|---|
-| `ediabasx-interface-serial` → `WebSerialTransport` | **Copy ~150 of 330 lines, don't depend.** See below |
-| `ediabasx-interface-serial` → `ftdiLatencyTimer.ts` | Not reusable; documents a real dead end (§6.1) |
-| `bimmerz-vfs` (`CachedHttpDirectory`, `openCacheBackend`) | Best genuine fit — but licence-blocked (§5.1) |
-| `bimmerz-ui` / `theme` / `logger`, `apps/web` shell | Reuse the *patterns*; copy components as needed |
-| `GatewayClient` / `ediabasx-server` | Concept transfers, code doesn't — it's ediabas-shaped RPC (jobs/SGBDs). ddtx wants a dumb serial-bytes-over-WebSocket relay |
-| `protocol-kwp` / `-uds` / `-doip` | **Not applicable.** They implement protocols natively; DDT4All delegates all of it to the ELM327's AT layer |
+| Asset                                                     | Verdict                                                                                                                     |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `ediabasx-interface-serial` → `WebSerialTransport`        | **Copy ~150 of 330 lines, don't depend.** See below                                                                         |
+| `ediabasx-interface-serial` → `ftdiLatencyTimer.ts`       | Not reusable; documents a real dead end (§6.1)                                                                              |
+| `bimmerz-vfs` (`CachedHttpDirectory`, `openCacheBackend`) | Best genuine fit — but licence-blocked (§5.1)                                                                               |
+| `bimmerz-ui` / `theme` / `logger`, `apps/web` shell       | Reuse the _patterns_; copy components as needed                                                                             |
+| `GatewayClient` / `ediabasx-server`                       | Concept transfers, code doesn't — it's ediabas-shaped RPC (jobs/SGBDs). ddtx wants a dumb serial-bytes-over-WebSocket relay |
+| `protocol-kwp` / `-uds` / `-doip`                         | **Not applicable.** They implement protocols natively; DDT4All delegates all of it to the ELM327's AT layer                 |
 
 **Why `WebSerialTransport` can't be a dependency.** Its
 `read(length, timeoutMs)` (`webSerialTransport.ts:219`) is length-driven; ELM327
@@ -219,9 +219,9 @@ relying on the 20 ms telegram-idle cutoff — which truncates valid ELM replies,
 since the ELM legitimately pauses longer than that during `SEARCHING...` and
 multi-frame collection. `bufferedData` is private with no `onData`, `peek`, or
 `readUntil`, so a delimiter reader cannot be layered on top — only added
-*inside*. That is base-package churn on the very first roadblock.
+_inside_. That is base-package churn on the very first roadblock.
 
-Worth lifting is the *lifecycle*, not the read model: open/close/read-loop
+Worth lifting is the _lifecycle_, not the read model: open/close/read-loop
 unwind ordering so the next `open()` doesn't race a cancelled reader;
 `configure()`'s close-and-reopen (exactly what `ATBRD` / `ST SBR` baud switching
 needs); `setDtr`/`setRts`/`setBreak`; and the `WebSerialPortLike` local-typing
@@ -282,7 +282,7 @@ Chrome/Edge desktop and ChromeOS. **Not Android, not iOS, not Firefox, not
 Safari.** This rules out phones and tablets, which is where a lot of real
 diagnostic work happens. Android Chrome does have WebUSB, so the mobile path is
 a WebUSB CDC-ACM/FTDI/CH340 driver. Decide early if mobile matters — it changes
-the transport abstraction, so `packages/elm` must take a transport *interface*,
+the transport abstraction, so `packages/elm` must take a transport _interface_,
 not a Web Serial port.
 
 Bluetooth adapters are out entirely: Web Bluetooth is BLE-only, classic SPP is
@@ -323,13 +323,13 @@ than it sounds and worse than it needs to be:
 - the first byte is the positive-response SID in 74,513 of 74,528 sampled cases,
   so it has exactly a live response's frame layout — substituting it is sound;
 - but **11.7% are shorter than their own `minbytes`**, and on a real screen that
-  is severe: the richest screen in the database (169 widgets over 3 requests)
-  renders 169 × NO DATA on stored replies alone.
+  is severe: the richest screen in the database (169 widgets over 2 polled
+  requests) renders 169 × NO DATA on stored replies alone.
 
 So `SimulatedLink` offers three fill modes — `canned` (faithful), `pad`
 (default: canned, extended to the length the fields need), and `synthetic`. A
 generated frame still leads with the positive-response SID, because `firstbyte`
-is 1-based *including* it and some screens read byte 1 directly.
+is 1-based _including_ it and some screens read byte 1 directly.
 
 Generated bytes are deterministic per request name, so screens don't flicker
 between refreshes; `drift` opts into variation.
@@ -356,6 +356,7 @@ Three defects that reading the Python did not surface:
 is built on top of it.
 
 **Phase 1 — codec + db (~1 week). ← current.** No car needed.
+
 - [x] `packages/core` — types from the measured schema, with branded name types
       enforcing the identity/display split (§4.1)
 - [x] `packages/codec` — `EcuData.setValue/getHexValue/getDisplayValue/getIntValue`,
@@ -380,6 +381,7 @@ exact range and `number` would silently corrupt VINs and DTC records.
 
 **Phase 1.5 — demo mode (done, out of order).** Built before the driver because
 it needs no hardware and it de-risks everything above the link:
+
 - [x] `packages/link` — `EcuLink` (a byte-oriented request/response channel) and
       `SimulatedLink`, which replays the database's own `replybytes`. Three fill
       modes, because a faithful replay leaves most fields blank (§8.1)
@@ -390,6 +392,7 @@ it needs no hardware and it de-risks everything above the link:
       bus trace, inspect overlay
 
 **Phase 2 — ELM driver.** Built without hardware, against a scripted adapter:
+
 - [x] `packages/elm` — AT layer, adapter identification, protocol setup for CAN /
       KWP2000 / ISO8, software ISO-TP, `MockElm`, and the Web Serial transport.
       `cfc0` deliberately unimplemented until measured (§6.1)
