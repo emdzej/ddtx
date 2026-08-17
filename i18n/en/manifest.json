@@ -2,11 +2,14 @@
  "format": 1,
  "locale": "en",
  "counts": {
-  "data": 150,
+  "data": 324,
+  "request": 65,
   "screen": 152,
   "category": 25,
-  "list": 131,
+  "device": 60,
+  "list": 217,
   "unit": 57,
+  "comment": 40,
   "label": 211,
   "button": 228,
   "message": 17
