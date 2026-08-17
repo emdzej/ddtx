@@ -4,12 +4,21 @@
  * The screens this tool renders carry their own colours from the database, and
  * they are unmistakably Visual Basic 6: `rgb(128,128,128)` panels, navy group
  * boxes at `rgb(0,0,64)` with yellow `rgb(255,255,0)` captions, "MS Sans Serif"
- * at 9.75pt. That artifact is the subject, so the chrome around it is drawn from
- * the same navy-and-yellow the data itself uses rather than from an unrelated
- * palette — and it stays quiet, because a loud shell would compete with the very
- * thing it exists to display.
+ * at 9.75pt. That artifact is the subject, so the chrome stays quiet: a loud
+ * shell would compete with the very thing it exists to display.
  *
- * Cool technical paper rather than warm cream: this is a fiche technique, not a
+ * The chrome is bleu-blanc-rouge, taken from the French Republic's own palette
+ * (Blue France #000091, Red Marianne #E1000F) rather than approximated. This is a
+ * French tool reading a French database about French cars, so the national
+ * identity is the honest reference — and its blue is close enough to the navy the
+ * database already uses for its own group boxes that the two sit together.
+ *
+ * Red is spent on **attention only**: a value that failed to read, a request the
+ * ECU refused, a live vehicle on the other end. It is never decoration. That
+ * makes the tricolour a by-product of the semantics rather than a costume, and it
+ * means red on screen always tells you something.
+ *
+ * Cool light ground rather than warm cream: this is a fiche technique, not a
  * reading experience, and a grey VB canvas sitting on cream looks like a mistake.
  *
  * Committed to a single light treatment. A garage-friendly dark mode is a real
@@ -18,23 +27,25 @@
  */
 
 :root {
-  --ink: #10151c; /* deep blue-black — the navy in the data, darkened */
-  --ink-soft: #4a5560;
-  --ink-faint: #8b959e;
-  --paper: #e9ecef; /* cool page */
-  --card: #f7f8f9; /* raised surfaces */
-  --rule: #c9cfd5;
-  --rule-soft: #dee3e7;
+  --ink: #10151c; /* deep blue-black */
+  --ink-soft: #48525e;
+  --ink-faint: #8a939d;
+  --paper: #eceef2; /* cool ground */
+  --card: #ffffff; /* blanc — panels and the canvas plate */
+  --rule: #c7cdd6;
+  --rule-soft: #e0e4ea;
 
-  --navy: #000b3a; /* the group-box navy the database uses verbatim */
-  --accent: #ffcd00; /* the marque's yellow, and the DB's own caption colour */
-  --live: #d64123; /* reserved for a real vehicle on the other end */
-  --ok: #1c7a4a;
+  /* Blue France. Carries all the chrome: strip, selection, primary action. */
+  --blue: #000091;
+  --blue-soft: #2a2ab0;
 
-  --mono:
-    ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
-  --sans:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Red Marianne. Attention only — failed reads, refusals, a live vehicle. */
+  --red: #e1000f;
+
+  --ok: #18753c; /* the DSFR success green, for parity */
+
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
   --strip-height: 34px;
 }
@@ -91,7 +102,7 @@ select {
 }
 
 :focus-visible {
-  outline: 2px solid var(--navy);
+  outline: 2px solid var(--blue);
   outline-offset: 1px;
 }
 

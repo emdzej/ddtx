@@ -6,7 +6,16 @@
   rather than sorted alphabetically.
 -->
 <script lang="ts">
+  import { projectLabel } from "@ddtx/core";
   import { app, openScreen } from "../lib/state.svelte.js";
+
+  /** Models this ECU is fitted to, named rather than coded. */
+  const vehicles = $derived(
+    (app.selected?.projects ?? [])
+      .filter((code) => code !== "" && !code.startsWith("#"))
+      .map(projectLabel)
+      .join(" · "),
+  );
 </script>
 
 <section class="contents">
@@ -19,15 +28,25 @@
       <dl>
         <div><dt class="eyebrow">Addr</dt><dd class="hex">{app.selected.address}</dd></div>
         <div><dt class="eyebrow">Bus</dt><dd>{app.selected.protocol || "unset"}</dd></div>
-        <div><dt class="eyebrow">Requests</dt><dd class="hex">{app.requestCount}</dd></div>
-        <div><dt class="eyebrow">Values</dt><dd class="hex">{app.dataCount}</dd></div>
-        {#if app.testerPresent !== null}
-          <div>
-            <dt class="eyebrow">Keepalive</dt>
-            <dd class="hex">{app.testerPresent}</dd>
-          </div>
+        {#if app.ecuPhase === "ready"}
+          <div><dt class="eyebrow">Requests</dt><dd class="hex">{app.requestCount}</dd></div>
+          <div><dt class="eyebrow">Values</dt><dd class="hex">{app.dataCount}</dd></div>
+          {#if app.testerPresent !== null}
+            <div>
+              <dt class="eyebrow">Keepalive</dt>
+              <dd class="hex">{app.testerPresent}</dd>
+            </div>
+          {/if}
+        {:else}
+          <!-- A count of 0 would be a claim, not a placeholder. -->
+          <div><dt class="eyebrow">Requests</dt><dd class="pending">—</dd></div>
+          <div><dt class="eyebrow">Values</dt><dd class="pending">—</dd></div>
         {/if}
       </dl>
+      {#if vehicles !== ""}
+        <p class="vehicles">{vehicles}</p>
+      {/if}
+
       {#if app.layoutWarnings > 0}
         <p class="warn">
           {app.layoutWarnings} reference{app.layoutWarnings === 1 ? "" : "s"} in this ECU's screens
@@ -73,6 +92,13 @@
     border-bottom: 1px solid var(--rule);
   }
 
+  .vehicles {
+    margin: 9px 0 0;
+    font-size: 11px;
+    color: var(--ink-soft);
+    line-height: 1.35;
+  }
+
   h2 {
     margin: 2px 0 9px;
     font-size: 15px;
@@ -101,11 +127,15 @@
     font-size: 12px;
   }
 
+  .pending {
+    color: var(--ink-faint);
+  }
+
   .warn {
     margin: 10px 0 0;
     padding: 6px 8px;
-    background: #fff;
-    border-left: 3px solid var(--accent);
+    background: var(--paper);
+    border-left: 3px solid var(--red);
     font-size: 11px;
     color: var(--ink-soft);
   }
@@ -150,12 +180,12 @@
   }
 
   button:hover {
-    background: #fff;
+    background: var(--paper);
   }
 
   button.current {
-    background: var(--navy);
-    color: var(--accent);
+    background: var(--blue);
+    color: #fff;
   }
 
   .empty {

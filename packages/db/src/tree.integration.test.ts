@@ -36,7 +36,11 @@ describe.skipIf(!available)("the real database tree", () => {
 
     expect(db.size).toBe(1580);
     expect(db.groups).toHaveLength(171);
-    expect(db.projects).toHaveLength(140);
+    // 140 distinct project tokens appear in the ECU entries; `db-split` keeps 139
+    // in the facet, dropping the XML artifact `#text` that the original
+    // converter emitted as if it were a vehicle.
+    expect(db.projects).toHaveLength(139);
+    expect(db.projects.some((p) => p.startsWith("#"))).toBe(false);
 
     const byProtocol = new Map<string, number>();
     for (const summary of db.list()) {

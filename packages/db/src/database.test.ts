@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DbTreeIndex, EcuFileDef, LayoutFileDef } from "@ddtx/core";
 import { EcuDatabase, getRequest } from "./database.js";
-import { MemoryDbSource, type DbSource } from "./source.js";
+import { HttpDbSource, MemoryDbSource, type DbSource } from "./source.js";
 
 const index: DbTreeIndex = {
   format: 1,
@@ -183,5 +183,28 @@ describe("EcuDatabase", () => {
     db.clearCache();
     await db.loadEcu("sirius");
     expect(counting.reads).toEqual(["ecu/sirius.json"]);
+  });
+});
+
+describe("HttpDbSource", () => {
+  it("encodes each path segment but keeps the separators", async () => {
+    // 80 of the 1,580 slugs contain `()[],`. Browsers tolerate those unencoded,
+    // but the tree should not depend on that.
+    const seen: string[] = [];
+    const source = new HttpDbSource("http://host/db/", async (input) => {
+      seen.push(String(input));
+      return new Response("{}");
+    });
+
+    await source.read("ecu/EDC16 C - V9EX84_OBD (Diag On Can).json");
+    expect(seen[0]).toBe("http://host/db/ecu/EDC16%20C%20-%20V9EX84_OBD%20(Diag%20On%20Can).json");
+  });
+
+  it("reports the status when a fetch fails, rather than parsing the body", async () => {
+    const source = new HttpDbSource(
+      "http://host/db",
+      async () => new Response("nope", { status: 404 }),
+    );
+    await expect(source.read("ecu/missing.json")).rejects.toThrow(/404/);
   });
 });

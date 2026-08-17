@@ -83,7 +83,7 @@
     </button>
   </div>
 
-  <main>
+  <main class:narrow={!app.catalogueOpen}>
     <Catalogue />
     <Contents />
 
@@ -116,31 +116,52 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
       {/if}
     </div>
   </main>
+
+  <div class="tricolour" aria-hidden="true"></div>
 </div>
 
 <style>
   .app {
     display: grid;
-    grid-template-rows: var(--strip-height) minmax(0, 1fr);
+    grid-template-rows: var(--strip-height) minmax(0, 1fr) 4px;
     height: 100%;
   }
 
-  /* Navy strip with the marque's yellow badge — the same pairing the database
-     uses for its own group captions. Turns vermilion when a vehicle is live. */
+  /*
+   * The one decorative element, at the foot of the app.
+   *
+   * It was under the status strip first, which didn't work: the blue third
+   * disappeared into the blue strip above it and the white third into the white
+   * panels below, so only red showed. Down here it sits against the trace panel
+   * and all three bands read.
+   */
+  .tricolour {
+    background: linear-gradient(
+      to right,
+      var(--blue) 0 33.333%,
+      #fff 33.333% 66.666%,
+      var(--red) 66.666% 100%
+    );
+    border-top: 1px solid var(--rule);
+  }
+
+  /* Blue France, with a white badge while the data is inert. The badge turns Red
+     Marianne when a real vehicle is on the other end — the one place the mode
+     change has to be impossible to miss. */
   .strip {
     display: flex;
     align-items: center;
     gap: 14px;
     padding: 0 12px;
-    background: var(--navy);
-    color: #dfe4ef;
+    background: var(--blue);
+    color: #d9dcf2;
     font-size: 11.5px;
   }
 
   .badge {
     padding: 2px 7px;
-    background: var(--accent);
-    color: var(--navy);
+    background: #fff;
+    color: var(--blue);
     font-size: 9.5px;
     font-weight: 800;
     letter-spacing: 0.14em;
@@ -148,7 +169,7 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
   }
 
   .claim {
-    color: #aab4c8;
+    color: #a7abd8;
   }
 
   .control {
@@ -159,7 +180,7 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
   }
 
   .control .eyebrow {
-    color: #8b96ad;
+    color: #9095cf;
   }
 
   .control.check {
@@ -177,7 +198,7 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
   }
 
   .strip input[type="checkbox"] {
-    accent-color: var(--accent);
+    accent-color: #fff;
     margin: 0;
   }
 
@@ -187,8 +208,8 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
 
   .read {
     padding: 3px 11px;
-    background: var(--accent);
-    color: var(--navy);
+    background: #fff;
+    color: var(--blue);
     border: 0;
     font-size: 11px;
     font-weight: 700;
@@ -196,8 +217,8 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
   }
 
   .read:disabled {
-    background: rgba(255, 255, 255, 0.14);
-    color: #7d88a0;
+    background: rgba(255, 255, 255, 0.16);
+    color: #8f93cc;
     cursor: not-allowed;
   }
 
@@ -205,6 +226,12 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
     display: grid;
     grid-template-columns: 288px 244px minmax(0, 1fr);
     min-height: 0;
+  }
+
+  /* Collapsed, the catalogue keeps just enough width to hold the reopen control
+     and the address of what's selected. */
+  main.narrow {
+    grid-template-columns: 40px 244px minmax(0, 1fr);
   }
 
   .stage {
@@ -233,7 +260,7 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
     text-align: left;
     background: var(--card);
     border: 1px solid var(--rule);
-    border-left: 3px solid var(--live);
+    border-left: 3px solid var(--red);
     max-width: 62ch;
   }
 
@@ -257,7 +284,8 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
   /* Below a laptop, the two index columns stack above the stage rather than
      squeezing the canvas, which is the one thing that must stay legible. */
   @media (max-width: 1100px) {
-    main {
+    main,
+    main.narrow {
       grid-template-columns: 1fr 1fr;
       grid-template-rows: 240px minmax(0, 1fr);
     }

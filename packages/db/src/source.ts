@@ -42,7 +42,14 @@ export class HttpDbSource implements DbSource {
   }
 
   async read(path: string): Promise<Uint8Array> {
-    const url = `${this.baseUrl.replace(/\/$/, "")}/${path}`;
+    // Encode per segment, not whole: 80 of the 1,580 slugs contain `()[],`, and
+    // while browsers happen to pass those through unencoded, relying on that is
+    // luck. Splitting on "/" keeps the path separators intact.
+    const encoded = path
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    const url = `${this.baseUrl.replace(/\/$/, "")}/${encoded}`;
     const response = await this.fetchImpl(url);
     if (!response.ok) {
       throw new Error(`DbSource: ${response.status} ${response.statusText} for ${url}`);

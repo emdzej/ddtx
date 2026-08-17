@@ -113,12 +113,15 @@
     color: var(--ink-soft);
   }
 
+  /* Both are attention, so both are red; the depth of the mark distinguishes a
+     refusal the ECU gave from a link that fell over. */
   li.rejected {
-    box-shadow: inset 3px 0 0 var(--accent);
+    box-shadow: inset 3px 0 0 var(--red);
   }
 
   li.failed {
-    box-shadow: inset 3px 0 0 var(--live);
+    box-shadow: inset 3px 0 0 var(--red);
+    background: color-mix(in srgb, var(--red) 7%, transparent);
   }
 
   .empty {

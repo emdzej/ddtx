@@ -1,46 +1,77 @@
 <!--
   The ECU catalogue.
 
-  1,580 entries, and the useful way in is rarely by name — it's "what's at address
-  26 on an X90", or "show me everything in the Injection group". So the filters are
-  the primary control and the search box is one of four peers, not a hero.
+  1,580 entries, and nobody arrives knowing an ECU's name. They arrive knowing the
+  car. So the vehicle picker is the only text field here — searching ECU names as
+  well was a second way to do the same job, and the weaker one.
+
+  Choosing a vehicle narrows Group to the systems that car actually has: 171
+  groups is not a menu, it's a wall.
+
+  Vehicles are labelled with the model name, not the project code the database
+  stores: "Renault Megane II", not "x84". The code stays the value, because that
+  is what the index matches on.
 
   Each row leads with the functional address in mono, because that is the thing
   you match against a scan result.
 -->
 <script lang="ts">
-  import { app, applyFilters, selectEcu } from "../lib/state.svelte.js";
+  import { projectLabel } from "@ddtx/core";
+  import VehiclePicker from "./VehiclePicker.svelte";
+  import {
+    app,
+    applyFilters,
+    selectEcu,
+    selectVehicle,
+    setCatalogueOpen,
+  } from "../lib/state.svelte.js";
 </script>
 
+{#if !app.catalogueOpen}
+  <!-- Collapsed: just enough to reopen, and to say what is selected. -->
+  <section class="rail">
+    <button
+      class="toggle"
+      onclick={() => setCatalogueOpen(true)}
+      title="Show the catalogue"
+      aria-expanded="false"
+    >
+      <span aria-hidden="true">›</span>
+      <span class="sr">Show the catalogue</span>
+    </button>
+    {#if app.selected !== null}
+      <span class="rail-addr hex">{app.selected.address}</span>
+    {/if}
+    <span class="rail-label">Catalogue</span>
+  </section>
+{:else}
 <section class="catalogue">
   <header>
     <span class="eyebrow">Catalogue</span>
-    <span class="count hex">{app.resultTotal} / {app.ecuCount}</span>
+    <span class="header-right">
+      <span class="count hex">{app.resultTotal} / {app.ecuCount}</span>
+      <button
+        class="toggle"
+        onclick={() => setCatalogueOpen(false)}
+        title="Hide the catalogue"
+        aria-expanded="true"
+      >
+        <span aria-hidden="true">‹</span>
+        <span class="sr">Hide the catalogue</span>
+      </button>
+    </span>
   </header>
 
   <div class="filters">
-    <input
-      type="search"
-      placeholder="Name contains…"
-      bind:value={app.search}
-      oninput={applyFilters}
-    />
+    <VehiclePicker vehicles={app.vehicles} value={app.project} onselect={selectVehicle} />
+
     <div class="selects">
       <label>
         <span class="eyebrow">Group</span>
         <select bind:value={app.group} onchange={applyFilters}>
           <option value="">All {app.groups.length}</option>
-          {#each app.groups as group (group)}
-            <option value={group}>{group}</option>
-          {/each}
-        </select>
-      </label>
-      <label>
-        <span class="eyebrow">Vehicle</span>
-        <select bind:value={app.project} onchange={applyFilters}>
-          <option value="">All {app.projects.length}</option>
-          {#each app.projects as project (project)}
-            <option value={project}>{project}</option>
+          {#each app.groups as group (group.value)}
+            <option value={group.value}>{group.label} — {group.count}</option>
           {/each}
         </select>
       </label>
@@ -68,7 +99,12 @@
           <span class="meta">
             <span class="group">{summary.group}</span>
             {#if summary.projects.length > 0}
-              <span class="projects">{summary.projects.slice(0, 6).join(" ")}</span>
+              <span class="projects" title={summary.projects.join(", ")}>
+                {summary.projects
+                  .filter((code) => !code.startsWith("#"))
+                  .map(projectLabel)
+                  .join(" · ")}
+              </span>
             {/if}
           </span>
         </button>
@@ -84,8 +120,69 @@
     <p class="capped">Nothing matches. Clear a filter to widen the search.</p>
   {/if}
 </section>
+{/if}
 
 <style>
+  /* Screen-reader-only text for the icon-only toggles. */
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-right: 1px solid var(--rule);
+    background: var(--card);
+  }
+
+  .rail-addr {
+    color: var(--blue);
+    font-weight: 600;
+  }
+
+  /* Rotated so the rail is identifiable without needing width for it. */
+  .rail-label {
+    writing-mode: vertical-rl;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .toggle {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: none;
+    border: 1px solid var(--rule);
+    color: var(--ink-soft);
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .toggle:hover {
+    background: var(--paper);
+    color: var(--blue);
+    border-color: var(--blue);
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   .catalogue {
     display: flex;
     flex-direction: column;
@@ -112,17 +209,9 @@
     gap: 8px;
   }
 
-  input[type="search"] {
-    width: 100%;
-    padding: 6px 8px;
-    background: #fff;
-    border: 1px solid var(--rule);
-    border-radius: 0;
-  }
-
   .selects {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 84px;
     gap: 6px;
   }
 
@@ -167,19 +256,19 @@
   }
 
   button:hover {
-    background: #fff;
+    background: var(--paper);
   }
 
-  /* The current row is marked with the marque's yellow on the leading edge —
-     one accent, used once. */
+  /* Selection is blue, never red: red in this app means something needs
+     attention, and a row you chose does not. */
   button.current {
-    background: #fff;
-    box-shadow: inset 3px 0 0 var(--accent);
+    background: var(--paper);
+    box-shadow: inset 3px 0 0 var(--blue);
   }
 
   .addr {
     grid-area: addr;
-    color: var(--navy);
+    color: var(--blue);
     font-weight: 600;
   }
 
@@ -203,7 +292,6 @@
   }
 
   .projects {
-    font-family: var(--mono);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

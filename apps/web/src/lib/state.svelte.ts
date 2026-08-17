@@ -11,6 +11,7 @@
  * variables and the UI reacts to explicit snapshots instead.
  */
 
+import { projectLabel } from "@ddtx/core";
 import {
   EcuDatabase,
   HttpDbSource,
@@ -33,12 +34,20 @@ interface AppState {
 
   /** Index facts, copied out so the UI doesn't reach into the database object. */
   ecuCount: number;
-  groups: string[];
   protocols: string[];
-  projects: string[];
+  /**
+   * Vehicles, labelled with the model name rather than the project code, sorted
+   * by that label. The code stays the value — it is what the index matches on.
+   */
+  vehicles: Facet[];
+  /**
+   * Groups available for the selected vehicle, with counts. Narrowed as the
+   * vehicle changes, because picking a car should shorten the list of systems
+   * rather than leave 171 of them on offer.
+   */
+  groups: Facet[];
 
   /** Catalogue filters. */
-  search: string;
   group: string;
   protocol: string;
   project: string;
@@ -69,6 +78,30 @@ interface AppState {
    * shrink the canvas to the available width. 100% is `uiscale = 8`.
    */
   zoom: number | "fit";
+  /**
+   * Is the catalogue open? Once an ECU is picked the catalogue has done its job,
+   * and 288px is worth more to the canvas — so it collapses to a rail. Kept in
+   * `localStorage` because reopening it on every reload is a small, repeated
+   * annoyance in a tool you keep refreshing.
+   */
+  catalogueOpen: boolean;
+}
+
+const CATALOGUE_KEY = "ddtx.catalogueOpen";
+
+function readCatalogueOpen(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(CATALOGUE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+/** A filter option: the value the index matches on, plus what to show. */
+export interface Facet {
+  value: string;
+  label: string;
+  count: number;
 }
 
 const RESULT_CAP = 400;
@@ -77,10 +110,9 @@ export const app = $state<AppState>({
   phase: "idle",
   error: null,
   ecuCount: 0,
-  groups: [],
   protocols: [],
-  projects: [],
-  search: "",
+  vehicles: [],
+  groups: [],
   group: "",
   protocol: "",
   project: "",
@@ -101,7 +133,17 @@ export const app = $state<AppState>({
   autoRefresh: false,
   inspect: false,
   zoom: 100,
+  catalogueOpen: readCatalogueOpen(),
 });
+
+export function setCatalogueOpen(open: boolean): void {
+  app.catalogueOpen = open;
+  try {
+    globalThis.localStorage?.setItem(CATALOGUE_KEY, String(open));
+  } catch {
+    /* private mode, or storage disabled — the toggle still works this session */
+  }
+}
 
 let database: EcuDatabase | null = null;
 let ecu: LoadedEcu | null = null;
@@ -120,9 +162,8 @@ export async function openDatabase(): Promise<void> {
   try {
     database = await EcuDatabase.open(new HttpDbSource(DB_URL));
     app.ecuCount = database.size;
-    app.groups = [...database.groups];
     app.protocols = [...database.protocols];
-    app.projects = [...database.projects];
+    app.vehicles = buildVehicles(database);
     app.phase = "ready";
     applyFilters();
   } catch (cause) {
@@ -134,10 +175,52 @@ export async function openDatabase(): Promise<void> {
   }
 }
 
+/** Every vehicle in the index, named and counted, ordered by model name. */
+function buildVehicles(db: EcuDatabase): Facet[] {
+  const counts = new Map<string, number>();
+  for (const summary of db.list()) {
+    for (const code of summary.projects) {
+      if (code === "" || code.startsWith("#")) continue;
+      counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+  }
+  return [...counts]
+    .map(([value, count]) => ({ value, label: projectLabel(value), count }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Groups present among the ECUs the current vehicle admits.
+ *
+ * Deliberately ignores the group filter itself: a dropdown that removed its own
+ * current value would fight the user.
+ */
+function buildGroups(db: EcuDatabase): Facet[] {
+  const counts = new Map<string, number>();
+  for (const summary of db.list(app.project === "" ? {} : { project: app.project })) {
+    if (summary.group === "") continue;
+    counts.set(summary.group, (counts.get(summary.group) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([value, count]) => ({ value, label: value, count }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Re-derive the group list after a vehicle change, dropping a group the new
+ * vehicle doesn't have rather than silently returning no results.
+ */
+export function selectVehicle(code: string): void {
+  app.project = code;
+  app.groups = database === null ? [] : buildGroups(database);
+  if (app.group !== "" && !app.groups.some((g) => g.value === app.group)) app.group = "";
+  applyFilters();
+}
+
 export function applyFilters(): void {
   if (database === null) return;
+  if (app.groups.length === 0) app.groups = buildGroups(database);
   const all = database.list({
-    ...(app.search.trim() === "" ? {} : { search: app.search.trim() }),
     ...(app.group === "" ? {} : { group: app.group }),
     ...(app.protocol === "" ? {} : { protocol: app.protocol }),
     ...(app.project === "" ? {} : { project: app.project }),
@@ -154,6 +237,13 @@ export async function selectEcu(summary: EcuSummary): Promise<void> {
   app.screen = null;
   app.snapshot = null;
   runtime = null;
+  // Cleared, not left behind: the header must not assert "0 requests" while the
+  // definitions are still in flight, nor show the previous ECU's totals.
+  app.categories = [];
+  app.layoutWarnings = 0;
+  app.requestCount = 0;
+  app.dataCount = 0;
+  app.testerPresent = null;
 
   try {
     ecu = await database.loadEcu(summary.slug);

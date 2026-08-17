@@ -154,7 +154,13 @@ function main(): void {
     }
     ecus[slug] = entry;
     if (entry.group) groups.add(entry.group);
-    for (const p of entry.projects) if (p) projects.add(p);
+    for (const project of entry.projects) {
+      // `#text` and friends are XML node names that leaked through the original
+      // converter (`projects.append(project.nodeName)` doesn't skip text nodes).
+      // They are not vehicles, so they stay out of the facet — the raw entries
+      // keep them, since the files are emitted byte-identical.
+      if (project && !project.startsWith("#")) projects.add(project);
+    }
     if (entry.protocol) protocols.add(entry.protocol);
   }
 

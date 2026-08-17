@@ -267,17 +267,21 @@
     text-align: left;
   }
 
+  /* Three failure shades, all red, distinguished by weight rather than by hue —
+     the Qt app paints NO DATA solid red and says nothing about the rest. */
   .value.nodata {
-    background: var(--live);
+    background: var(--red);
     color: #fff;
   }
   .value.rejected {
-    background: var(--accent);
-    color: var(--ink);
+    background: #fff;
+    color: var(--red);
+    border-color: var(--red);
+    font-weight: 700;
   }
   .value.failed {
     background: var(--ink);
-    color: var(--accent);
+    color: #fff;
   }
 
   .ecu-button {
@@ -300,18 +304,18 @@
 
   /* Inspect: show the measurement rather than hide it. */
   .canvas.inspect .widget {
-    outline: 1px solid rgba(0, 11, 58, 0.5);
+    outline: 1px solid rgba(0, 0, 145, 0.55);
     outline-offset: -1px;
   }
   .canvas.inspect .widget[data-kind="input"] {
-    outline-color: var(--live);
+    outline-color: var(--red);
   }
   .canvas.inspect .label {
     outline: 1px dashed rgba(16, 21, 28, 0.4);
     outline-offset: -1px;
   }
   .canvas.inspect .caption {
-    box-shadow: inset -1px 0 0 var(--accent);
+    box-shadow: inset -1px 0 0 var(--red);
   }
 
   figcaption {
