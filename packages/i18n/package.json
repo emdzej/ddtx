@@ -1,0 +1,12 @@
+{
+  "name": "@ddtx/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Translation overlay — resolves database strings to a locale at the render boundary",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "scripts": { "build": "tsc -b", "typecheck": "tsc --noEmit", "clean": "rm -rf dist .turbo *.tsbuildinfo" }
+}

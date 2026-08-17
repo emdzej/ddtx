@@ -35,6 +35,9 @@ importers:
       '@ddtx/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@ddtx/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@ddtx/link':
         specifier: workspace:*
         version: link:../../packages/link
@@ -77,6 +80,8 @@ importers:
       '@ddtx/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/i18n: {}
 
   packages/link:
     dependencies:

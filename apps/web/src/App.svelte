@@ -12,7 +12,14 @@
   import Catalogue from "./components/Catalogue.svelte";
   import Contents from "./components/Contents.svelte";
   import Trace from "./components/Trace.svelte";
-  import { app, openDatabase, reconfigureDemo, refresh, setAutoRefresh } from "./lib/state.svelte.js";
+  import {
+    app,
+    openDatabase,
+    reconfigureDemo,
+    refresh,
+    setAutoRefresh,
+    setLocale,
+  } from "./lib/state.svelte.js";
 
   onMount(() => void openDatabase());
 
@@ -53,6 +60,25 @@
       <input type="checkbox" bind:checked={app.inspect} />
       <span>Inspect layout</span>
     </label>
+
+    <label class="control">
+      <span class="eyebrow">Language</span>
+      <select
+        value={app.locale}
+        onchange={(event) => void setLocale(event.currentTarget.value)}
+        title="Original shows the database exactly as authored — mostly French, but a third of it is already English"
+      >
+        <option value="fr">Original — as authored</option>
+        <option value="en">English</option>
+      </select>
+    </label>
+
+    {#if app.locale !== "fr"}
+      <label class="control check">
+        <input type="checkbox" bind:checked={app.showUntranslated} />
+        <span>Mark gaps</span>
+      </label>
+    {/if}
 
     <label class="control">
       <span class="eyebrow">Zoom</span>

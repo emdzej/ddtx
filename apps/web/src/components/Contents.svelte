@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
   import { projectLabel } from "@ddtx/core";
-  import { app, openScreen } from "../lib/state.svelte.js";
+  import { app, openScreen, t, untranslated } from "../lib/state.svelte.js";
 
   /** Models this ECU is fitted to, named rather than coded. */
   const vehicles = $derived(
@@ -61,12 +61,19 @@
       <nav>
         {#each app.categories as category (category.name)}
           <div class="category">
-            <h3>{category.name}</h3>
+            <h3 class:gap={untranslated("category", category.name)}>
+              {t("category", category.name)}
+            </h3>
             <ul>
               {#each category.screens as name (name)}
                 <li>
-                  <button class:current={app.screen?.name === name} onclick={() => void openScreen(name)}>
-                    {name}
+                  <button
+                    class:current={app.screen?.name === name}
+                    class:gap={untranslated("screen", name)}
+                    title={app.locale === "fr" ? undefined : name}
+                    onclick={() => void openScreen(name)}
+                  >
+                    {t("screen", name)}
                   </button>
                 </li>
               {/each}
@@ -186,6 +193,11 @@
   button.current {
     background: var(--blue);
     color: #fff;
+  }
+
+  /* Dev aid: mark what still falls through to French. */
+  .gap {
+    box-shadow: inset 0 -1px 0 var(--red);
   }
 
   .empty {

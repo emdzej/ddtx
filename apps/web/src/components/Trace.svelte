@@ -8,6 +8,7 @@
 -->
 <script lang="ts">
   import type { ScreenSnapshot } from "@ddtx/screens";
+  import { t } from "../lib/state.svelte.js";
 
   interface Props {
     snapshot: ScreenSnapshot | null;
@@ -30,7 +31,7 @@
     <ol>
       {#each snapshot.exchanges as exchange, i (i)}
         <li class:rejected={exchange.rejected !== undefined} class:failed={exchange.error !== undefined}>
-          <span class="name">{exchange.requestName}</span>
+          <span class="name" title={exchange.requestName}>{t("request", exchange.requestName)}</span>
           <span class="frames">
             <span class="dir">→</span><span class="hex">{exchange.sent}</span>
             <span class="dir">←</span><span class="hex">{exchange.received || "—"}</span>

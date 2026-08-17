@@ -1,0 +1,22 @@
+{
+  "_comment": "Confirmation prompts shown before a button sends. These are the only strings in the database that speak to the operator, and half of them precede something irreversible on a live vehicle — so they say what will happen rather than just shouting Attention. Note 'Adomètre' is a typo for 'Odomètre' in the source; translated by intent.",
+
+  "Attention ! Modification de la configuration véhicule": "This changes the vehicle configuration.",
+  "Attention, effacement des pannes mémorisées !": "This clears the stored fault codes.",
+  "Attention, effacement des pannes mémorisées ! ": "This clears the stored fault codes.",
+  "Attention, effacement des mémorisées!": "This clears the stored faults.",
+  "Attention, effacement de la Freeze Frame OBD !": "This clears the OBD freeze frame.",
+  "Avez-vous configuré les quatre valeurs": "Have you set all four values?",
+  "Appuyer sur start": "Press start.",
+
+  "Odomètre total": "Total odometer",
+  "Adomètre journalier": "Trip odometer",
+  "Taille Pneus": "Tyre size",
+  "Vitesse autorisée": "Speed limit",
+  "Numéro série pièce détachée": "Spare part serial number",
+  "Ecriture Facteur L": "Write L factor",
+  "Facteur W": "W factor",
+  "Offset Heures": "Hours offset",
+  "Offset Minutes": "Minutes offset",
+  "RDBLID Identification ( 2180 )": "RDBLID identification (2180)"
+}

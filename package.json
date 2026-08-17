@@ -20,7 +20,10 @@
     "typecheck": "turbo run typecheck && pnpm --filter @ddtx/web typecheck",
     "clean": "turbo run clean",
     "golden": "python3 tools/golden/generate.py tools/golden/vectors data/ecu.zip",
-    "check": "turbo run build typecheck && pnpm --filter @ddtx/web typecheck && pnpm test:db"
+    "check": "turbo run build typecheck && pnpm --filter @ddtx/web typecheck && pnpm test:db",
+    "i18n:extract": "python3 tools/i18n/extract.py extract data/tree /tmp/ddtx-i18n.json",
+    "i18n:build": "python3 tools/i18n/extract.py build data/tree en i18n/source/en i18n/en",
+    "i18n:coverage": "python3 tools/i18n/extract.py coverage data/tree i18n/source/en"
   },
   "devDependencies": {
     "@types/node": "^22.13.1",

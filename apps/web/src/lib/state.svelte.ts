@@ -12,6 +12,7 @@
  */
 
 import { projectLabel } from "@ddtx/core";
+import { Overlay, type Namespace } from "@ddtx/i18n";
 import {
   EcuDatabase,
   HttpDbSource,
@@ -85,6 +86,21 @@ interface AppState {
    * annoyance in a tool you keep refreshing.
    */
   catalogueOpen: boolean;
+  /** `"fr"` shows the database as authored; any other locale applies an overlay. */
+  locale: string;
+  /** Entries in the loaded overlay, for the strip's coverage readout. */
+  overlaySize: number;
+  /**
+   * Bumped whenever the overlay changes or is re-primed.
+   *
+   * `t()` lives in module scope, so Svelte cannot see it as a dependency — a
+   * template calling `t(...)` would keep showing the old language until something
+   * else invalidated it. Reading this counter inside `t()` gives the compiler the
+   * dependency it needs.
+   */
+  overlayVersion: number;
+  /** Outline strings that fell through to French, to make gaps findable. */
+  showUntranslated: boolean;
 }
 
 const CATALOGUE_KEY = "ddtx.catalogueOpen";
@@ -134,6 +150,10 @@ export const app = $state<AppState>({
   inspect: false,
   zoom: 100,
   catalogueOpen: readCatalogueOpen(),
+  locale: "fr",
+  overlaySize: 0,
+  overlayVersion: 0,
+  showUntranslated: false,
 });
 
 export function setCatalogueOpen(open: boolean): void {
@@ -150,6 +170,89 @@ let ecu: LoadedEcu | null = null;
 let layout: PreparedLayout | null = null;
 let runtime: ScreenRuntime | null = null;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
+let overlay = Overlay.none();
+
+/**
+ * Translate a database string for display.
+ *
+ * The single render-boundary entry point. Reference resolution never goes through
+ * here — `prepareLayout`, the codec, and the link all work on the raw strings, so
+ * a translated caption can never be used as a lookup key.
+ */
+export function t(namespace: Namespace, source: string): string {
+  // Registers the dependency; the value itself is not used.
+  void app.overlayVersion;
+  return overlay.t(namespace, source, {
+    ...(app.selected === null ? {} : { ecu: app.selected.slug, group: app.selected.group }),
+  });
+}
+
+/** Did this string fall through untranslated? Drives the dev-mode outline. */
+export function untranslated(namespace: Namespace, source: string): boolean {
+  void app.overlayVersion;
+  if (!app.showUntranslated || app.locale === "fr") return false;
+  return overlay.isUntranslated(namespace, source, {
+    ...(app.selected === null ? {} : { ecu: app.selected.slug, group: app.selected.group }),
+  });
+}
+
+export async function setLocale(locale: string): Promise<void> {
+  app.locale = locale;
+  if (locale === "fr") {
+    overlay = Overlay.none();
+    app.overlaySize = 0;
+  } else {
+    try {
+      const response = await fetch(`/i18n/${locale}/bundle.json`);
+      overlay = response.ok
+        ? Overlay.create(locale, (await response.json()) as Record<string, string>)
+        : Overlay.none();
+    } catch {
+      overlay = Overlay.none();
+    }
+    app.overlaySize = overlay.size;
+  }
+  await primeOverlay();
+  app.overlayVersion += 1;
+}
+
+/**
+ * Hash every string the open ECU could display, so `t()` can be synchronous.
+ *
+ * Done per ECU rather than globally: the whole database is 509k distinct strings
+ * and hashing them all up front would cost far more than it saves.
+ */
+async function primeOverlay(): Promise<void> {
+  if (ecu === null || app.locale === "fr") return;
+  const sources: string[] = [];
+  for (const [name, data] of ecu.data) {
+    sources.push(name);
+    if (data.unit !== "") sources.push(data.unit);
+    if (data.comment !== "") sources.push(data.comment);
+    for (const label of data.lists.values()) sources.push(label);
+  }
+  for (const name of ecu.requests.keys()) sources.push(name);
+  for (const device of ecu.def.devices ?? []) {
+    sources.push(device.name);
+    for (const flag of Object.keys(device.devicedata ?? {})) sources.push(flag);
+  }
+  if (layout !== null) {
+    for (const category of layout.categories) {
+      sources.push(category.name);
+      for (const screen of category.screens) sources.push(screen);
+    }
+    for (const screen of layout.screens.values()) {
+      sources.push(screen.name);
+      for (const label of screen.labels) sources.push(label.text);
+      for (const button of screen.buttons) {
+        sources.push(button.text);
+        for (const message of button.messages) sources.push(message);
+      }
+    }
+  }
+  await overlay.prime(sources);
+  app.overlayVersion += 1;
+}
 
 /** The loaded ECU, for components that need data definitions (units, comments). */
 export function currentEcu(): LoadedEcu | null {
@@ -253,6 +356,7 @@ export async function selectEcu(summary: EcuSummary): Promise<void> {
     app.requestCount = ecu.requests.size;
     app.dataCount = ecu.data.size;
     app.testerPresent = testerPresentFrame(ecu);
+    await primeOverlay();
     app.ecuPhase = "ready";
   } catch (cause) {
     app.ecuPhase = "error";

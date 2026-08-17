@@ -1,0 +1,33 @@
+{
+  "_comment": "Category names are the top level of the screen menu, so these are the first French words anyone meets. Renault's internal vocabulary needs unpacking rather than translating literally: APV (après-vente) is after-sales, Usine is the factory/end-of-line context, Etudes is engineering, Flotte is fleet telematics, UCE (unité de commande électronique) is simply the ECU. Service codes like RDBLID or ReadDataByLID ($21) are left as-is — they name a UDS service and a technician recognises them.",
+
+  "Diagnostic": "Diagnostics",
+  "Etats": "Status",
+  "Configuration": "Configuration",
+  "Ecrans de Configurations": "Configuration screens",
+  "Configuration ancien TDB": "Configuration — early instrument cluster",
+  "Paramètrage UCE": "ECU parameter setup",
+  "Lecture Paramètres": "Read parameters",
+
+  "Ecrans APV": "After-sales screens",
+  "Ecrans APV - Usine": "After-sales and factory screens",
+  "Ecrans Usine et Apv": "Factory and after-sales screens",
+  "APV-Méthodes": "After-sales — methods",
+
+  "Etudes": "Engineering",
+  "Ecran Etudes": "Engineering screen",
+  "Ecrans Etudes": "Engineering screens",
+  "Ecrans specialisés": "Specialised screens",
+
+  "Ecran flotte": "Fleet screen",
+  "Ecrans Flottes": "Fleet screens",
+  "Ecrans FAP": "Particulate filter screens",
+  "X70 ESP série": "Master II — production ESP",
+
+  "IOCBLID": "IOCBLID",
+  "PSTs": "PSTs",
+  "RDBI / WDBI": "RDBI / WDBI",
+  "RDBLID": "RDBLID",
+  "ReadDataByLID ($21)": "ReadDataByLID ($21)",
+  "WriteDataByLID ($3B)": "WriteDataByLID ($3B)"
+}

@@ -27,7 +27,7 @@
     widgetParts,
   } from "@ddtx/screens";
   import type { ScreenSnapshot } from "@ddtx/screens";
-  import { currentEcu, pressButton } from "../lib/state.svelte.js";
+  import { app, currentEcu, pressButton, t, untranslated } from "../lib/state.svelte.js";
 
   interface Props {
     screen: PreparedScreen;
@@ -66,14 +66,30 @@
   function unitFor(dataName: string | null): string {
     if (dataName === null) return "";
     const unit = currentEcu()?.data.get(dataName)?.unit ?? "";
-    return unit === "" ? "" : ` ${unit}`;
+    return unit === "" ? "" : ` ${t("unit", unit)}`;
+  }
+
+  /**
+   * A decoded value, translated if it is an enum label.
+   *
+   * `getDisplayValue` returns the label straight out of `data.lists`, so the
+   * translation happens here rather than in the codec — which must keep returning
+   * the raw label, because the write path looks it back up to recover the integer.
+   */
+  function valueText(dataName: string | null, value: string): string {
+    if (dataName === null) return value;
+    const data = currentEcu()?.data.get(dataName);
+    if (data === undefined || data.items.get(value) === undefined) return value;
+    return t("list", value);
   }
 
   function tooltip(dataName: string | null, request: string): string {
     if (dataName === null) return `${request} — no value bound`;
     const data = currentEcu()?.data.get(dataName);
-    const parts = [dataName, request];
-    if (data?.comment) parts.push(data.comment);
+    // The tooltip shows the original alongside the translation: it is the place
+    // to check what the database actually calls something.
+    const parts = app.locale === "fr" ? [dataName, request] : [t("data", dataName), dataName, request];
+    if (data?.comment) parts.push(t("comment", data.comment));
     if (data) parts.push(`${data.bitscount} bits${data.unit ? ` · ${data.unit}` : ""}`);
     return parts.join("\n");
   }
@@ -97,7 +113,7 @@
             label.alignment,
           )};{fontStyle(label.font)}"
         >
-          {label.text}
+          {t("label", label.text)}
         </div>
       {/each}
 
@@ -112,7 +128,11 @@
           )}"
           title={tooltip(widget.dataName, widget.request)}
         >
-          <span class="caption" style={css(parts.caption)}>{widget.label}</span>
+          <span
+            class="caption"
+            class:gap={untranslated("data", widget.label)}
+            style={css(parts.caption)}>{t("data", widget.label)}</span
+          >
           <span
             class="value"
             class:input={widget.kind === "input"}
@@ -122,7 +142,7 @@
             style={css(parts.value)}
           >
             {#if value?.value !== null && value?.value !== undefined}
-              {value.value}{unitFor(widget.dataName)}
+              {valueText(widget.dataName, value.value)}{unitFor(widget.dataName)}
             {/if}
           </span>
         </div>
@@ -139,7 +159,7 @@
             : button.send.map((s) => s.RequestName).join("\n")}
           onclick={() => void pressButton(button.uniquename)}
         >
-          {button.text}
+          {t("button", button.text)}
         </button>
       {/each}
     </div>
@@ -314,6 +334,11 @@
     outline: 1px dashed rgba(16, 21, 28, 0.4);
     outline-offset: -1px;
   }
+  /* Dev aid: mark captions still falling through to French. */
+  .caption.gap {
+    box-shadow: inset 0 -1px 0 var(--red);
+  }
+
   .canvas.inspect .caption {
     box-shadow: inset -1px 0 0 var(--red);
   }

@@ -73,7 +73,42 @@ function serveDatabaseTree(): Plugin {
   };
 }
 
+/**
+ * Serve the built translation bundles at `/i18n`.
+ *
+ * Separate from the database tree because they have different lifecycles: the
+ * tree is a fixed upstream snapshot, the bundles are ours and change whenever a
+ * translation is edited. In production both are static directories.
+ */
+function serveTranslations(): Plugin {
+  const root = fileURLToPath(new URL("../../i18n", import.meta.url));
+  return {
+    name: "ddtx-serve-i18n",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use("/i18n", (req, res, next) => {
+        const requested = (req.url ?? "/").split("?")[0] ?? "/";
+        const path = resolve(root, normalize(`.${sep}${requested}`));
+        if (path !== root && !path.startsWith(root.endsWith(sep) ? root : root + sep)) {
+          res.statusCode = 403;
+          res.end("outside the translation directory");
+          return;
+        }
+        try {
+          if (!statSync(path).isFile()) return next();
+          res.setHeader("content-type", "application/json; charset=utf-8");
+          // Edited far more often than the tree, so no caching here.
+          res.setHeader("cache-control", "no-cache");
+          res.end(readFileSync(path));
+        } catch {
+          next();
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [svelte(), serveDatabaseTree()],
+  plugins: [svelte(), serveDatabaseTree(), serveTranslations()],
   server: { host: "0.0.0.0" },
 });
