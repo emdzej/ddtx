@@ -5,18 +5,23 @@ nothing here talks to a vehicle yet.
 
 ## Running it
 
-The database tree is 1.19 GB, so it can't live in `public/`. Build it once, then
-point the dev server at it:
+From the repo root, with `data/ecu.zip` in place:
 
 ```sh
-pnpm build                                            # build the packages
-node tools/db-split/dist/index.js data/ecu.zip /tmp/ddtx-tree
-DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev
+pnpm install
+pnpm build
+pnpm dev
 ```
 
-`vite.config.ts` serves the tree at `/db` in development. In production `/db` is
-a static tree on whatever host serves the app, and the client code is identical.
-Set `VITE_DB_URL` to point elsewhere.
+`pnpm dev` splits the database first if it needs to, then starts Vite. The split
+writes ~1.2 GB to `data/tree` and takes about 19 s; subsequent runs compare the
+archive's hash against the tree's manifest and skip it in under a second.
+`pnpm db:split:force` re-splits unconditionally.
+
+`vite.config.ts` serves `data/tree` at `/db` in development — no env var needed.
+`DDTX_DB_TREE` overrides the location. In production `/db` is a static tree on
+whatever host serves the app and the client code is identical; point it elsewhere
+with `VITE_DB_URL`.
 
 ## Demo mode
 

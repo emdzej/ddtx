@@ -1,34 +1,38 @@
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, normalize, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig, type Plugin } from "vite";
 
 /**
  * Serve the split database tree at `/db` straight off disk in development.
  *
- * The tree is 1.19 GB, so it cannot live in `public/`. Point `DDTX_DB_TREE` at
- * the output of `tools/db-split` and `pnpm dev` finds it with no copying, no
- * symlinks, and no separate server:
- *
- *   node tools/db-split/dist/index.js data/ecu.zip /tmp/ddtx-tree
- *   DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev
+ * The tree is 1.19 GB, so it cannot live in `public/`. It is read straight from
+ * `data/tree` — where `pnpm db:split` puts it — with no copying, no symlinks, and
+ * no separate server, so `pnpm dev` needs no environment at all. `DDTX_DB_TREE`
+ * overrides the location.
  *
  * In production `/db` is a static tree on whatever host serves the app, so this
  * plugin is development-only and the client code is identical either way.
  */
 function serveDatabaseTree(): Plugin {
-  const root = process.env.DDTX_DB_TREE;
+  // `pnpm db:split` writes here, so the common case needs no environment at all.
+  // `data/` is git-ignored, which is where the un-redistributable database
+  // belongs anyway.
+  const defaultRoot = fileURLToPath(new URL("../../data/tree", import.meta.url));
+  const root = process.env.DDTX_DB_TREE ?? defaultRoot;
 
   return {
     name: "ddtx-serve-db-tree",
     apply: "serve",
     configureServer(server) {
-      if (root === undefined) {
+      if (!existsSync(join(root, "index.json"))) {
         server.config.logger.warn(
-          "[ddtx] DDTX_DB_TREE is not set — /db will 404. Run tools/db-split and point it at the output.",
+          `[ddtx] no database tree at ${root} — /db will 404. Run \`pnpm db:split\`.`,
         );
         return;
       }
+      server.config.logger.info(`[ddtx] serving /db from ${root}`);
 
       // Resolved once so the containment check compares absolute paths, and with
       // a trailing separator so a sibling directory like `/tmp/ddtx-tree-evil`

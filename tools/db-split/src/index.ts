@@ -53,11 +53,23 @@ function main(): void {
   const outDir = positional[1];
 
   if (zipPath === undefined || outDir === undefined) {
-    console.error("usage: db-split <ecu.zip> <outdir> [--compress=gzip[,br]] [--quiet]");
+    console.error(
+      "usage: db-split <ecu.zip> <outdir> [--if-needed] [--compress=gzip[,br]] [--quiet]",
+    );
     process.exit(2);
   }
 
   const quiet = args.includes("--quiet");
+
+  // `--if-needed` makes this safe to put in front of `dev`: splitting rewrites
+  // 1.19 GB and takes ~15 s, so it should happen once per snapshot, not once per
+  // run. The manifest records the source hash, which is what "same snapshot"
+  // means — a mtime check would miss a rebuilt zip with identical timestamps.
+  if (args.includes("--if-needed") && isUpToDate(zipPath, outDir)) {
+    if (!quiet) console.log(`database tree in ${outDir} is current — skipping`);
+    return;
+  }
+
   const compressArg = args.find((a) => a.startsWith("--compress"));
   const encodings = new Set(
     (compressArg?.split("=")[1] ?? (compressArg ? "gzip" : ""))
@@ -189,6 +201,28 @@ function main(): void {
   if (indexedMissingFile > 0) log(`  indexed but no file                 ${indexedMissingFile}`);
   if (unindexed.length > 0) log(`  file but not indexed               ${unindexed.length}`);
   log(`\nwrote ${outDir}`);
+}
+
+/**
+ * Has this exact archive already been split into this directory?
+ *
+ * Compares the source SHA-256 recorded in `manifest.json` against the archive on
+ * disk, and confirms the index the app loads first is actually present — a run
+ * killed part-way leaves a manifest-less tree, and a stale manifest with no index
+ * would be worse than no manifest at all.
+ */
+function isUpToDate(zipPath: string, outDir: string): boolean {
+  try {
+    const manifest = JSON.parse(readFileSync(join(outDir, "manifest.json"), "utf8")) as {
+      source?: { sha256?: string };
+    };
+    if (manifest.source?.sha256 === undefined) return false;
+    if (!statSync(join(outDir, "index.json")).isFile()) return false;
+    const actual = createHash("sha256").update(readFileSync(zipPath)).digest("hex");
+    return actual === manifest.source.sha256;
+  } catch {
+    return false;
+  }
 }
 
 /**
