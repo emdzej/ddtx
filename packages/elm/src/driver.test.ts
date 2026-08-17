@@ -7,7 +7,12 @@ import {
   uartBufferFor,
 } from "./driver.js";
 import { ElmLink } from "./link.js";
-import { MockElm, respondWithPayload, type MockElmOptions } from "./mock.js";
+import {
+  MockElm,
+  respondWithPayload,
+  type FrameHandler,
+  type MockElmOptions,
+} from "./mock.js";
 
 const noSleep = () => Promise.resolve();
 
@@ -338,5 +343,126 @@ describe("MockElm settings capture", () => {
     await mock.write("AT CAF0\r");
     expect(mock.settings.has("ATCAF")).toBe(true);
     expect(mock.settings.get("ATCAF")).toBe("0");
+  });
+});
+
+describe("the cfc0 strategy", () => {
+  /**
+   * An ECU behind an adapter that no longer answers flow control.
+   *
+   * Its multi-frame response stops after the first frame and stays stopped until it
+   * receives `30 0N 00`, which is exactly what `AT CFC0` costs us — and exactly the
+   * case the default path never exercises, because there the adapter does it.
+   */
+  function stallingEcu(payloadHex: string, options: { blockSize?: number } = {}) {
+    const hex = payloadHex.toUpperCase();
+    const bytes = hex.length / 2;
+    const frames: string[] = [
+      `1${bytes.toString(16).toUpperCase().padStart(3, "0").slice(-3)}${hex.slice(0, 12)}`,
+    ];
+    let rest = hex.slice(12);
+    let sequence = 1;
+    while (rest.length > 0) {
+      frames.push(`2${(sequence % 16).toString(16).toUpperCase()}${rest.slice(0, 14).padEnd(14, "0")}`);
+      sequence += 1;
+      rest = rest.slice(14);
+    }
+
+    let sent = 0;
+    const flowControlsReceived: string[] = [];
+    const handler: FrameHandler = (frame) => {
+      const compact = frame.replace(/\s+/g, "").toUpperCase();
+
+      if (compact.startsWith("30")) {
+        flowControlsReceived.push(compact);
+        // Release at most the block the requester asked for.
+        const asked = Number.parseInt(compact.slice(2, 4), 16) || 1;
+        const block = frames.slice(sent, sent + asked);
+        sent += block.length;
+        return block.length > 0 ? block : "NO DATA";
+      }
+
+      // The request's own frames: answer the first with the ECU's first frame, and
+      // nothing more until flow control arrives.
+      if (sent === 0) {
+        sent = 1;
+        const fc = options.blockSize === undefined ? [] : [`300${options.blockSize.toString(16)}00`];
+        return [...fc, frames[0] as string];
+      }
+      return undefined;
+    };
+    return { handler, flowControlsReceived, frames };
+  }
+
+  it("asks for the rest of a response the adapter no longer collects", async () => {
+    // 20 bytes: a first frame plus two consecutive frames.
+    const payload = `6180${"AB".repeat(18)}`;
+    const ecu = stallingEcu(payload);
+    const mock = new MockElm({ onFrame: ecu.handler });
+    const driver = new ElmDriver(mock, { sleep: noSleep, strategy: "cfc0" });
+    await driver.initCan();
+
+    const reply = await driver.request("2180");
+
+    expect(reply.replace(/ /g, "")).toBe(payload);
+    // One flow-control frame covered both remaining frames.
+    expect(ecu.flowControlsReceived).toEqual(["3002002"]);
+  });
+
+  it("puts the adapter into CFC0, not CFC1", async () => {
+    const mock = new MockElm({ onFrame: () => undefined });
+    const driver = new ElmDriver(mock, { sleep: noSleep, strategy: "cfc0" });
+    await driver.initCan();
+
+    expect(mock.written).toContain("AT CFC0");
+    expect(mock.written).not.toContain("AT CFC1");
+  });
+
+  it("honours the block size an ECU asks for when sending a long request", async () => {
+    // The ECU allows two consecutive frames per block, so a five-frame request owes
+    // it flow control partway through rather than being written back to back.
+    const request = `2E0100${"11".repeat(30)}`;
+    const written: string[] = [];
+    let firstFrameSeen = false;
+    const mock = new MockElm({
+      onFrame: (frame) => {
+        const compact = frame.replace(/\s+/g, "").toUpperCase();
+        written.push(compact);
+        if (compact.startsWith("1")) {
+          firstFrameSeen = true;
+          return "300200";
+        }
+        // Answer only once the whole request is in.
+        if (firstFrameSeen && compact.startsWith("2") && written.filter((w) => w.startsWith("2")).length === 4) {
+          return ["026E01"];
+        }
+        return undefined;
+      },
+    });
+    const driver = new ElmDriver(mock, { sleep: noSleep, strategy: "cfc0" });
+    await driver.initCan();
+
+    const reply = await driver.request(request);
+
+    expect(reply.replace(/ /g, "")).toBe("6E01");
+    // Every frame of the request went out, in order, with no frame dropped.
+    expect(written.filter((w) => w.startsWith("1") || w.startsWith("2"))).toHaveLength(5);
+  });
+
+  it("stops asking when the ECU stops answering", async () => {
+    // A first frame and then silence: the loop must end rather than spin.
+    const mock = new MockElm({
+      onFrame: (frame) => {
+        const compact = frame.replace(/\s+/g, "").toUpperCase();
+        if (compact.startsWith("30")) return "NO DATA";
+        return ["1014610011223344"];
+      },
+    });
+    const driver = new ElmDriver(mock, { sleep: noSleep, strategy: "cfc0" });
+    await driver.initCan();
+
+    const reply = await driver.request("2180");
+
+    expect(reply).toBe("WRONG RESPONSE");
   });
 });

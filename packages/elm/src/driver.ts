@@ -22,7 +22,16 @@
  * negative response comes back as text for the caller to inspect.
  */
 
-import { frameRequest, reassemble, spaced, usableLines } from "./isotp.js";
+import {
+  flowControlFrame,
+  frameRequest,
+  hexLines,
+  parseFlowControl,
+  reassemble,
+  spaced,
+  usableLines,
+  type FlowControl,
+} from "./isotp.js";
 import { TIMEOUT_MARKER, type ElmTransport } from "./transport.js";
 
 /** Which framing path a request takes. */
@@ -302,11 +311,12 @@ export class ElmDriver {
    *
    * Every frame is written back to back and the adapter's flow control (`AT CFC1`)
    * keeps the ECU in step, which is why the received flow-control frames are
-   * ignored rather than answered. The `cfc0` strategy — where we would have to
-   * answer them ourselves, in time — is the one docs/plan.md §6.1 flags as
-   * unproven over Web Serial, and it is not implemented until that is measured.
+   * ignored rather than answered. `sendCanCfc0` is the other half of this, for when
+   * we have to answer them ourselves.
    */
   private async sendCan(command: string): Promise<string> {
+    if (this.strategy === "cfc0") return this.sendCanCfc0(command);
+
     const compact = command.replace(/\s+/g, "").toUpperCase();
     const frames = frameRequest(compact);
     if (typeof frames === "string") return frames;
@@ -325,6 +335,115 @@ export class ElmDriver {
     if (result.negative !== undefined) return result.value;
     if (result.error !== undefined) return "WRONG RESPONSE";
     return result.value;
+  }
+
+  /**
+   * Send a request over CAN, answering flow control ourselves (`AT CFC0`).
+   *
+   * Port of `elm.py:send_can_cfc0`. Two things differ from the default path, and
+   * both come from the adapter having stepped out of the way:
+   *
+   * - **Sending.** After our first frame the ECU replies with a flow-control frame
+   *   saying how many consecutive frames it will accept and how far apart. We honour
+   *   it rather than writing everything back to back.
+   * - **Receiving.** A multi-frame *response* stops dead after its first frame until
+   *   someone sends `30 0N 00`. Under `AT CFC1` the adapter does; here we do, once
+   *   per block of up to seven frames.
+   *
+   * Why it exists: some adapters' automatic flow control mishandles Renault's longer
+   * responses, and this is the way round that. It is not the default because the
+   * default is one round trip fewer and, on the hardware measured so far, correct.
+   *
+   * **Unverified against a vehicle.** The framing and the flow-control exchange are
+   * covered by `MockElm` — including an ECU that withholds its consecutive frames
+   * until asked — but no test here can tell you how a real ECU paces its blocks.
+   */
+  private async sendCanCfc0(command: string): Promise<string> {
+    const compact = command.replace(/\s+/g, "").toUpperCase();
+    const frames = frameRequest(compact);
+    if (typeof frames === "string") return frames;
+    if (frames.length === 0) return "";
+
+    const requestSid = compact.slice(0, 2);
+    const responses: string[] = [];
+    // What the ECU has asked for, until it says otherwise. One frame at a time with
+    // no gap is the conservative assumption: it costs round trips, never frames.
+    let flow: FlowControl = { blockSize: 1, separationMs: 0 };
+
+    let index = 0;
+    while (index < frames.length) {
+      const frame = frames[index] as string;
+      const reply = await this.sendRaw(frame);
+      index += 1;
+
+      let sawFlowControl = false;
+      for (const line of hexLines(reply, frame)) {
+        const fc = parseFlowControl(line);
+        if (fc !== undefined) {
+          flow = fc;
+          sawFlowControl = true;
+          break;
+        }
+        responses.push(line);
+      }
+
+      // Block size 0 means "send the rest without stopping".
+      const allowed =
+        sawFlowControl && flow.blockSize === 0 ? frames.length - index : flow.blockSize - 1;
+      let burst = Math.min(Math.max(allowed, 0), frames.length - index);
+      while (burst > 0) {
+        if (flow.separationMs > 0) await this.sleep(flow.separationMs);
+        await this.sendRaw(frames[index] as string);
+        index += 1;
+        burst -= 1;
+      }
+    }
+
+    await this.pullRemainingFrames(responses);
+
+    const result = reassemble(responses, requestSid);
+    if (result.error === "frame") this.errors.frame += 1;
+    if (result.negative !== undefined) return result.value;
+    if (result.error !== undefined) return "WRONG RESPONSE";
+    return result.value;
+  }
+
+  /**
+   * Ask the ECU for the rest of a multi-frame response, a block at a time.
+   *
+   * Only does anything when a first frame arrived without all its consecutive frames
+   * behind it — which under `AT CFC0` is every multi-frame response, because nothing
+   * has answered the ECU's flow-control request yet.
+   *
+   * Stops on `NO DATA`, on a frame count that says we already have everything, and
+   * on a hard cap: an ECU that keeps answering flow control without advancing the
+   * sequence must not spin here forever.
+   */
+  private async pullRemainingFrames(responses: string[]): Promise<void> {
+    const firstFrameIndex = responses.findIndex((line) => line.startsWith("1"));
+    if (firstFrameIndex < 0) return;
+
+    const first = responses[firstFrameIndex] as string;
+    const declaredBytes = Number.parseInt(first.slice(1, 4), 16);
+    if (Number.isNaN(declaredBytes)) return;
+
+    // The first frame carries 6 payload bytes, each consecutive frame 7.
+    const total = 1 + Math.ceil(Math.max(declaredBytes - 6, 0) / 7);
+    let have = 1 + responses.slice(firstFrameIndex + 1).filter((l) => l.startsWith("2")).length;
+
+    for (let round = 0; have < total && round < total; round += 1) {
+      const frame = flowControlFrame(total - have);
+      const reply = await this.sendRaw(frame);
+      if (reply.includes("NO DATA")) break;
+
+      const before = have;
+      for (const line of hexLines(reply, frame)) {
+        responses.push(line);
+        if (line.startsWith("2")) have += 1;
+      }
+      // Nothing new arrived: asking again will not help.
+      if (have === before) break;
+    }
   }
 
   /**

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { frameRequest, reassemble, spaced, usableLines } from "./isotp.js";
+import {
+  flowControlFrame,
+  frameRequest,
+  hexLines,
+  parseFlowControl,
+  reassemble,
+  spaced,
+  usableLines,
+} from "./isotp.js";
 
 describe("frameRequest", () => {
   it("puts a short request in one frame, prefixed with its length", () => {
@@ -124,5 +132,46 @@ describe("spaced", () => {
   it("splits hex into bytes for the codec", () => {
     expect(spaced("6100E8")).toBe("61 00 E8");
     expect(spaced("")).toBe("");
+  });
+});
+
+describe("flow control", () => {
+  it("reads the block size and separation time an ECU asked for", () => {
+    expect(parseFlowControl("300A14")).toEqual({ blockSize: 10, separationMs: 20 });
+  });
+
+  it("is not fooled by a consecutive frame, which also carries data", () => {
+    expect(parseFlowControl("2100112233445566")).toBeUndefined();
+    expect(parseFlowControl("1014610011223344")).toBeUndefined();
+  });
+
+  it("reads Fx separation as microseconds, per ISO 15765", () => {
+    // The original sleeps `x * 100` **milliseconds** here — a thousand times what
+    // the ECU asked for, enough to blow the 5 s session timeout on a long request.
+    expect(parseFlowControl("3000F9")?.separationMs).toBeCloseTo(0.9);
+    expect(parseFlowControl("3000F1")?.separationMs).toBeCloseTo(0.1);
+  });
+
+  it("falls back to the original's defaults on a truncated frame", () => {
+    expect(parseFlowControl("30")).toEqual({ blockSize: 3, separationMs: 239 });
+  });
+
+  it("keeps block size 0 distinct — it means send everything", () => {
+    expect(parseFlowControl("300000")).toEqual({ blockSize: 0, separationMs: 0 });
+  });
+
+  it("caps a requested block at 7 and tells the adapter how many to await", () => {
+    // Odd length on purpose: `30 0N 00` is the three-byte frame and the trailing
+    // nibble is the ELM327's "expect N responses" suffix, not part of it. Asking for
+    // more than the adapter hands back in one go loses frames, hence the cap.
+    expect(flowControlFrame(20)).toBe("3007007");
+    expect(flowControlFrame(3)).toBe("3003003");
+    expect(flowControlFrame(0)).toBe("3001001");
+  });
+
+  it("keeps flow-control frames that usableLines drops", () => {
+    const reply = "0140\n300800\n6100E8\n>";
+    expect(usableLines(reply, "0140")).toEqual(["6100E8"]);
+    expect(hexLines(reply, "0140")).toEqual(["300800", "6100E8"]);
   });
 });

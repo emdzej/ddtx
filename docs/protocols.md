@@ -147,15 +147,15 @@ A first frame with nothing behind it, or a response with no PCI prefix at all,
 almost always means `AT CAF0` was reset by `AT SP` or flow control never completed.
 Both are reported as a frame error rather than guessed at.
 
-### 2.4 Flow control: the open question
+### 2.4 Flow control
 
-Three strategies exist; two are implemented.
+Three strategies, all implemented.
 
-| Strategy | Who answers flow control       | Status                                           |
-| -------- | ------------------------------ | ------------------------------------------------ |
-| `manual` | The adapter (`AT CFC1`)        | **Default.** One round trip per written frame    |
-| `stpx`   | The adapter, entirely (`STPX`) | Used on STN firmware ≥ 4.2.0. Fewest round trips |
-| `cfc0`   | **We do** (`AT CFC0`)          | **Not implemented** — deliberately               |
+| Strategy | Who answers flow control       | Status                                                                         |
+| -------- | ------------------------------ | ------------------------------------------------------------------------------ |
+| `manual` | The adapter (`AT CFC1`)        | **Default.** One round trip per written frame                                  |
+| `stpx`   | The adapter, entirely (`STPX`) | Used on STN firmware ≥ 4.2.0. Fewest round trips                               |
+| `cfc0`   | **We do** (`AT CFC0`)          | Fallback for adapters whose own flow control mishandles long Renault responses |
 
 `cfc0` needs millisecond turnaround: after each block the ECU waits for _our_ flow
 control frame. Over Web Serial that means a full host round trip per FC frame, and
@@ -164,9 +164,27 @@ the FTDI latency timer — 16 ms by default — **cannot be changed from a web p
 needs a sysfs write, macOS a native `ioctl`, Windows registry plus admin; browser
 is a silent no-op.
 
-So implementing `cfc0` before measuring would be guessing, and `pnpm cli bench`
-exists to take the measurement. See [`plan.md`](plan.md) §6.1 and
-[`../apps/cli/README.md`](../apps/cli/README.md).
+That is why it was left unimplemented until measured. The measurement below settled
+it: **~6.4 ms per flow-control frame, owed once per seven consecutive frames**, not
+once per frame. A 100-byte response costs two FC frames, or about 13 ms on top —
+real, but not disqualifying. `manual` stays the default because it is one round trip
+fewer and correct on the hardware measured.
+
+Two details of the implementation are worth knowing:
+
+- **The frame is odd-length on purpose.** `30 0N 00` is the three bytes; the trailing
+  nibble in `3007007` is the ELM327's "expect N responses" suffix, which is what stops
+  the adapter returning after the first frame of a block.
+- **`Fx` separation times are read as microseconds**, per ISO 15765-2 — `F1`–`F9` mean
+  100–900 µs while `00`–`7F` mean 0–127 ms, two units in one byte. The original reads
+  `Fx` as `x * 100` **milliseconds** and sleeps that long, a thousand times what the
+  ECU asked for, which would blow the 5 s session timeout on a long request. We follow
+  the spec. No vehicle to hand requests `Fx` at all, so this divergence is unverified
+  on hardware.
+
+The whole path is covered by a `MockElm` ECU that withholds its consecutive frames
+until it receives flow control, which is the behaviour the default path never
+exercises. What no mock can tell you is how a real ECU paces its blocks.
 
 #### First measurement — 2026-08-17
 

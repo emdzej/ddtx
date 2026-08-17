@@ -406,7 +406,8 @@ it needs no hardware and it de-risks everything above the link:
 
 - [x] `packages/elm` — AT layer, adapter identification, protocol setup for CAN /
       KWP2000 / ISO8, software ISO-TP, `MockElm`, and the Web Serial transport.
-      `cfc0` deliberately unimplemented until measured (§6.1)
+      and all three flow-control strategies. `cfc0` was held back until measured
+      (§6.1) and is now implemented as a fallback — see `protocols.md` §2.4
 - [x] `packages/session` — `attachEcu` (the seam between database and driver) and
       the write gates (§6.3)
 - [x] `apps/cli` — `ports`, `probe`, `bench`, `read`, `screens`. `bench` is the
@@ -421,8 +422,11 @@ it needs no hardware and it de-risks everything above the link:
       7.0, max 7.4, sd 0.2 over 200 exchanges. Chrome adds nothing measurable and
       its tail is tighter than Node's. **§6.1's central risk does not hold on this
       hardware** — the bottleneck is the 38400 baud UART, not the browser
-- [ ] **On a vehicle**: real ECU response timing, and whether the adapter's own
-      `CFC1` flow control holds on a live bus
+- [x] `cfc0` implemented, now that §6.1's measurement showed it costs ~6.4 ms per
+      flow-control frame and owes one per _seven_ consecutive frames. Tested against
+      a mock ECU that withholds its consecutive frames until asked
+- [ ] **On a vehicle**: real ECU response timing, whether the adapter's own `CFC1`
+      flow control holds on a live bus, and how a real ECU paces `cfc0` blocks
 
 **Phase 3 — read-only screens (1–2 weeks).** Mostly done by phase 1.5; what
 remains is driving it from a real link.

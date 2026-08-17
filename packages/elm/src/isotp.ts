@@ -15,7 +15,11 @@
  *   0L dd dd dd dd dd dd dd    single frame, L = payload length
  *   1LLL dd dd dd dd dd dd     first frame, LLL = total payload length
  *   2N dd dd dd dd dd dd dd    consecutive frame, N = sequence number mod 16
- *   3F BS ST                   flow control (we ignore these on receive)
+ *   3F BS ST                   flow control
+ *
+ * Flow control is the one part whose handling depends on the strategy: under
+ * `AT CFC1` the adapter answers them and we drop them, under `AT CFC0` we answer
+ * them ourselves. See `parseFlowControl` and `flowControlFrame`.
  */
 
 const HEX = /^[0-9A-Fa-f]*$/;
@@ -255,4 +259,79 @@ function collectMultiFrame(frames: readonly string[]): MultiFrame {
 /** `"6100E8"` → `"61 00 E8"`, the shape the codec decodes. */
 export function spaced(hex: string): string {
   return (hex.match(/.{1,2}/g) ?? []).join(" ");
+}
+
+/* ── Flow control ───────────────────────────────────────────────────────────── */
+
+export interface FlowControl {
+  /** Consecutive frames the sender may send before waiting for the next FC. */
+  blockSize: number;
+  /** Minimum gap between consecutive frames, in milliseconds. */
+  separationMs: number;
+}
+
+/**
+ * The block size and separation time an ECU asked for, or undefined if this is not
+ * a flow-control frame.
+ *
+ * Two things about the separation time. Per ISO 15765-2, `F1`–`F9` mean 100–900
+ * **microseconds** while `00`–`7F` mean 0–127 milliseconds — two different units in
+ * one byte. **The original reads `Fx` as `x * 100` milliseconds** and sleeps that
+ * long, which is a thousand times what the ECU asked for; `F9` would stall 900 ms
+ * per frame and blow the 5 s session timeout on any long request. We follow the
+ * spec instead. This divergence is deliberate and, lacking a vehicle that requests
+ * `Fx` at all, unverified on hardware.
+ *
+ * The defaults for a truncated frame (`03` block size, `EF` separation) are the
+ * original's, kept because they are what an ECU that sends a short FC frame has
+ * been getting away with.
+ */
+export function parseFlowControl(line: string): FlowControl | undefined {
+  const frame = line.trim().replace(/\s+/g, "").toUpperCase();
+  if (!frame.startsWith("3") || !HEX.test(frame)) return undefined;
+
+  const blockSizeHex = frame.slice(2, 4) || "03";
+  const separationHex = frame.slice(4, 6) || "EF";
+
+  const blockSize = Number.parseInt(blockSizeHex, 16);
+  const separationMs = separationHex.startsWith("F")
+    ? Number.parseInt(separationHex.slice(1, 2), 16) / 10
+    : Number.parseInt(separationHex, 16);
+
+  return {
+    // Block size 0 means "send everything without stopping".
+    blockSize: Number.isNaN(blockSize) ? 3 : blockSize,
+    separationMs: Number.isNaN(separationMs) ? 239 : separationMs,
+  };
+}
+
+/**
+ * The flow-control frame to send so an ECU releases its next block.
+ *
+ * `remaining` caps the block size at 7 — asking for more than the ELM327 will hand
+ * back in one go loses frames — and the trailing digit tells the adapter how many
+ * responses to wait for, which is what stops it returning at the first one.
+ */
+export function flowControlFrame(remaining: number): string {
+  const block = Math.max(1, Math.min(remaining, 7));
+  const nibble = block.toString(16).toUpperCase();
+  return `300${nibble}00${nibble}`;
+}
+
+/**
+ * Every usable hex line, flow-control frames included.
+ *
+ * `usableLines` drops them, which is right under `AT CFC1` where the adapter has
+ * already answered them. Under `AT CFC0` they are the whole point.
+ */
+export function hexLines(reply: string, sentFrame: string): string[] {
+  const out: string[] = [];
+  for (const raw of reply.split("\n")) {
+    const line = raw.trim().replace(/\s+/g, "");
+    if (line.length === 0) continue;
+    if (line === sentFrame) continue; // echo
+    if (!HEX.test(line)) continue;
+    out.push(line);
+  }
+  return out;
 }
