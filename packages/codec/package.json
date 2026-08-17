@@ -1,0 +1,17 @@
+{
+  "name": "@ddtx/codec",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bit-field encode/decode for the DDT4All ECU database — port of ecu_data.py and ecu_request.py",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": { "@ddtx/core": "workspace:*" }
+}

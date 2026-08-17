@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# The ECU database is not ours to redistribute (see docs/plan.md §6.4)
+data/
+
+# Golden vectors derived from the ECU database (regenerate with tools/golden)
+tools/golden/vectors/db.json
