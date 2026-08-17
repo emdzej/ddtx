@@ -1,0 +1,19 @@
+{
+  "name": "@ddtx/db-split",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Split ecu.zip into the static per-ECU tree the web app fetches",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "bin": { "db-split": "dist/index.js" },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ddtx/core": "workspace:*",
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": { "@types/node": "^22.13.1" }
+}

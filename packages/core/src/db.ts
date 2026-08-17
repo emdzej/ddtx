@@ -272,3 +272,25 @@ export interface IndexEntry {
 
 /** `db.json`: ECU file name (with `.json` suffix) → summary. 1,580 entries. */
 export type DbIndex = Record<string, IndexEntry>;
+
+/* ── split static tree (`index.json`) ────────────────────────────────────── */
+
+/**
+ * The index `tools/db-split` emits and `@ddtx/db` loads: the upstream summary
+ * re-keyed by slug, plus the facets a client would otherwise derive by walking
+ * all 1,580 entries on every startup.
+ *
+ * A slug is the zip entry name minus `.json`, which is URL-safe for every entry
+ * in the 2019 snapshot (verified: no characters outside `[A-Za-z0-9._-]`, no
+ * case-insensitive collisions). Definitions live at `ecu/<slug>.json` and
+ * screens at `layout/<slug>.json`.
+ *
+ * ~1.1 MB, 118 KB gzipped — small enough to load eagerly and search in-process.
+ */
+export interface DbTreeIndex {
+  format: 1;
+  ecus: Record<string, IndexEntry>;
+  groups: string[];
+  projects: string[];
+  protocols: string[];
+}

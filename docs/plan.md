@@ -75,21 +75,61 @@ skippable. Index timestamps are 2019: this is a frozen snapshot, not a moving
 target. That matters for the i18n key design (§7).
 
 `db.json` is a clean flat index, `filename → {protocol, autoidents[], ecuname,
-address, group, projects[]}`. 1.5 MB, ~150 KB gzipped — load eagerly, search
-client-side.
+address, group, projects[]}` — load eagerly, search client-side.
+
+**The 588 GIFs are dead weight.** No layout in the database references any
+graphics filename, so they are DDT2000 leftovers. `db-split` drops them, which
+removes image handling from the renderer's scope entirely.
 
 ### 3.1 Delivery: split at build time, never ship the zip
 
 Definitions and layouts are already separate files, which is exactly the split
 we want — the codec needs only `.json`, and `.layout` is fetched only when
-someone opens a screen. Serve per-ECU files with brotli/gzip precompression
-behind the `db.json` index; cache in OPFS.
+someone opens a screen. `tools/db-split` emits `index.json` plus
+`ecu/<slug>.json` and `layout/<slug>.json`, byte-identical to their zip entries
+(verified over 600 files), with optional `.gz`/`.br` siblings for static hosts.
 
-- Typical ECU ~800 KB raw → **~65 KB over the wire**
-- Worst case ~9 MB raw → ~750 KB
+Measured on the wire, gzip -9, sampled over 300 ECUs:
 
-Shipping the monolith would mean a 104 MB download and a 1.3 GB in-browser
-expansion. Don't. `tools/db-split` is a phase-1 deliverable.
+| | p50 | p90 | max | mean |
+|---|---:|---:|---:|---:|
+| `ecu/<slug>.json` | 17.6 KB | 116.3 KB | 447.2 KB | 40.6 KB |
+| `layout/<slug>.json` | 8.9 KB | 47.6 KB | 175.2 KB | 17.9 KB |
+| both, opening one ECU | **29.1 KB** | 157.8 KB | 532.7 KB | 58.4 KB |
+
+`index.json` is 1.1 MB raw → **118 KB gzipped**. So a cold start costs 118 KB and
+opening an ECU typically costs another 29 KB. Shipping the monolith would have
+cost 104 MB and a 1.3 GB in-browser expansion.
+
+Slugs are the zip entry name minus `.json`, which is URL-safe throughout the
+snapshot: no characters outside `[A-Za-z0-9._-]`, no case-insensitive collisions,
+max length 109.
+
+### 3.1.1 Cross-reference integrity
+
+Every reference in the database was checked, three times independently (Python
+against the zip, `db-split`'s validator, and `@ddtx/db`'s loader — all agreeing):
+
+| Case | Count | Of | Handling |
+|---|---:|---:|---|
+| widget caption is `""` | 1,421 | 1,021,519 | **valid decoration** — draw the box, no value |
+| widget names absent data | 24 | 1,021,519 | drop, warn |
+| widget names absent request | 0 | 1,021,519 | — |
+| `button` has no `send` key | 1,367 | 104,276 | keep, renders inert |
+| `button.send` names absent request | 70 | 200,604 | drop the entry (15 buttons go inert) |
+| `presend` names absent request | 1 | 11,403 | drop the entry |
+| dataitem names absent data | 70 | 2,200,912 | ECU-level; codec throws |
+| category names absent screen | 0 | 40,179 | — |
+| category lists no screens | 55 | 10,067 | drop the dead menu node |
+
+The database is therefore ~99.99% internally consistent, but not perfectly, so
+the loader must prune rather than throw. The empty-caption case is the one that
+matters: it is 98% of all apparently-dangling widgets and is not an error at all.
+Treating it as one would blank out a large share of screens.
+
+Three ECUs define a data entry literally named `""`; the Qt app binds their 5
+empty-caption widgets to it, so the loader resolves before falling back to
+"decoration" rather than the other way round.
 
 ### 3.2 The screen schema is rigid — good news for the renderer
 
@@ -290,8 +330,13 @@ is built on top of it.
       214,649 decodes yielding 73,299 distinct display strings, 118,929 encodes
       mutating bytes, 22,775 exercising the fail-closed divergences). Five real
       bugs found, all invisible to code review — see `tools/golden/README.md`
-- [ ] `tools/db-split` — the static tree from §3.1
-- [ ] `packages/db` — index + ECU/layout loading over a VFS
+- [x] `tools/db-split` — the static tree from §3.1, plus a validation report.
+      15 s over the whole archive; output verified byte-identical to the zip
+- [x] `packages/db` — `DbSource` (http / memory / cached), `EcuDatabase` with a
+      lazy per-ECU cache, `prepareLayout` binding and pruning per §3.1.1, and
+      `matchAutoIdent` (port of `EcuIdent.checkWith` / `checkApproximate`).
+      26 unit tests, plus an opt-in run over all 1,580 ECUs that pins the
+      integrity totals — 39,665 screens and 1,021,495 bound widgets in 10 s
 
 Everything in the codec uses `BigInt`, not `number`, for the bit math: values
 run up to 357 bytes wide, so `int(x, 2)` in Python routinely exceeds float64's
