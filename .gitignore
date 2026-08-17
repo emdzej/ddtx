@@ -8,3 +8,5 @@ data/
 
 # Golden vectors derived from the ECU database (regenerate with tools/golden)
 tools/golden/vectors/db.json
+__pycache__/
+*.pyc
