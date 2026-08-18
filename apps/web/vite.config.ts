@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
@@ -108,7 +108,48 @@ function serveTranslations(): Plugin {
   };
 }
 
+/**
+ * Emit the built translation bundles as build assets.
+ *
+ * `serveTranslations` is development-only, so without this a production build ships no
+ * translations at all — and the failure is silent: `Overlay` falls back to the original
+ * French, which looks like missing translation work rather than a missing file. That is
+ * exactly the failure mode docs/i18n-overlay.md warns about, arriving by a different
+ * route.
+ *
+ * Emitted rather than copied into `public/` because `i18n/` is generated output: it is
+ * rebuilt by `pnpm i18n:build`, and duplicating it into a tracked directory would leave
+ * two copies to disagree.
+ */
+function bundleTranslations(): Plugin {
+  const root = fileURLToPath(new URL("../../i18n", import.meta.url));
+  return {
+    name: "ddtx-bundle-i18n",
+    apply: "build",
+    generateBundle() {
+      if (!existsSync(root)) return;
+      for (const locale of readdirSync(root, { withFileTypes: true })) {
+        if (!locale.isDirectory() || locale.name === "source") continue;
+        for (const file of ["bundle.json", "manifest.json"]) {
+          const path = join(root, locale.name, file);
+          if (!existsSync(path)) continue;
+          this.emitFile({
+            type: "asset",
+            // Kept at the same path the dev middleware serves, so the client fetches
+            // one URL either way.
+            fileName: `i18n/${locale.name}/${file}`,
+            source: readFileSync(path),
+          });
+        }
+      }
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [svelte(), serveDatabaseTree(), serveTranslations()],
+  // GitHub Pages serves under /<repo>/. Everything the client fetches at runtime goes
+  // through `import.meta.env.BASE_URL`, which Vite derives from this.
+  base: process.env.BASE_PATH ?? "/",
+  plugins: [svelte(), serveDatabaseTree(), serveTranslations(), bundleTranslations()],
   server: { host: "0.0.0.0" },
 });

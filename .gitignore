@@ -15,3 +15,6 @@ __pycache__/
 # `pnpm plugins:build` regenerates them in about a second.
 packages/plugins/*/build/
 apps/web/public/plugins/
+
+# Release packaging output.
+out/

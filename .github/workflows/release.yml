@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the notes can list what changed since the previous tag.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Resolve the tag
+        id: tag
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check the tag matches package.json
+        # A release whose tarball says 0.1.0 while the tag says 0.2.0 is worse than no
+        # release: the artifact and the notes disagree and there is no way to tell which
+        # is right afterwards.
+        run: |
+          set -euo pipefail
+          DECLARED=$(node -p "require('./package.json').version")
+          if [ "$DECLARED" != "${{ steps.tag.outputs.version }}" ]; then
+            echo "tag ${{ steps.tag.outputs.tag }} does not match package.json version $DECLARED" >&2
+            exit 1
+          fi
+          echo "version $DECLARED"
+
+      - name: Build everything
+        run: |
+          set -euo pipefail
+          pnpm build
+          pnpm plugins:build
+          pnpm i18n:build
+          pnpm typecheck
+          pnpm test
+          node tools/check-plugin-imports.mjs
+
+      - name: Build the web app for a domain root
+        # No BASE_PATH: the tarball is for self-hosting at the root of a host. Anyone
+        # serving it under a subpath rebuilds with BASE_PATH set — which the README says,
+        # because a build cannot be relocated after the fact.
+        run: pnpm web:build
+
+      - name: Package
+        id: package
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.tag.outputs.version }}"
+          mkdir -p out
+
+          # The web app: everything a static host needs. No ECU database — it is 1.19 GB
+          # unpacked and not ours to redistribute, and the app installs one itself from a
+          # `ecu.zip` the user supplies.
+          tar -czf "out/ddtx-web-$VERSION.tar.gz" -C apps/web/dist .
+
+          # The compiled plugins on their own, for anyone hosting the app themselves and
+          # wanting to pin or audit which procedures are present.
+          tar -czf "out/ddtx-plugins-$VERSION.tar.gz" -C apps/web/dist/plugins .
+
+          ( cd out && sha256sum ./*.tar.gz > SHA256SUMS )
+          ls -la out
+          cat out/SHA256SUMS
+
+      - name: Write the notes
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.tag.outputs.version }}"
+          PREVIOUS=$(git describe --tags --abbrev=0 "${{ steps.tag.outputs.tag }}^" 2>/dev/null || true)
+
+          {
+            echo "## ddtx $VERSION"
+            echo
+            echo "Browser-based Renault / Dacia / Nissan ECU diagnostics."
+            echo
+            echo "### Artifacts"
+            echo
+            echo '- `ddtx-web-'"$VERSION"'.tar.gz` — the web app, for any static host. Built for a'
+            echo '  domain root; to serve it under a subpath, rebuild with `BASE_PATH=/prefix/`.'
+            echo '- `ddtx-plugins-'"$VERSION"'.tar.gz` — the compiled plugin modules and manifests.'
+            echo '- `SHA256SUMS` — checksums for both.'
+            echo
+            echo "### The ECU database is not included"
+            echo
+            echo "It is 1.19 GB unpacked and not ours to redistribute. The app installs one"
+            echo "itself: choose your own \`ecu.zip\` on first run and it is unpacked into the"
+            echo "browser's private filesystem, where it stays with no further prompting."
+            echo
+            echo "### Requires a Chromium-based browser for hardware"
+            echo
+            echo "Talking to an ELM327 needs Web Serial, which is Chrome and Edge on desktop."
+            echo "Browsing the database, the screens and the plugins works anywhere."
+            echo
+            if [ -n "$PREVIOUS" ]; then
+              echo "### Changes since $PREVIOUS"
+              echo
+              git log --no-merges --pretty='- %s' "$PREVIOUS..${{ steps.tag.outputs.tag }}"
+            else
+              echo "First tagged release."
+            fi
+          } > out/NOTES.md
+
+          cat out/NOTES.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # `gh` ships on the runner, so this needs no third-party action — one less thing
+        # in the supply chain of a tool that writes to vehicles.
+        run: |
+          set -euo pipefail
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            --title "ddtx ${{ steps.tag.outputs.version }}" \
+            --notes-file out/NOTES.md \
+            --verify-tag \
+            out/ddtx-web-*.tar.gz \
+            out/ddtx-plugins-*.tar.gz \
+            out/SHA256SUMS

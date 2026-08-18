@@ -459,7 +459,10 @@ export async function setLocale(locale: string): Promise<void> {
     app.overlaySize = 0;
   } else {
     try {
-      const response = await fetch(`/i18n/${locale}/bundle.json`);
+      // Base-relative: GitHub Pages serves the app under /<repo>/, and an absolute
+      // path would 404 there — silently, because a missing bundle falls back to the
+      // original French and reads as untranslated rather than broken.
+      const response = await fetch(`${import.meta.env.BASE_URL}i18n/${locale}/bundle.json`);
       overlay = response.ok
         ? Overlay.create(locale, (await response.json()) as Record<string, string>)
         : Overlay.none();

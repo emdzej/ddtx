@@ -34,8 +34,14 @@ import {
   type DbSourceKind,
 } from "./installStorage.js";
 
-/** Where the dev-server middleware serves the tree from. */
-export const DEV_DB_URL = (import.meta.env.VITE_DB_URL as string | undefined) ?? "/db";
+/**
+ * Where the dev-server middleware serves the tree from.
+ *
+ * Base-relative so it still points at the right place when the app is hosted under a
+ * subpath, which is what GitHub Pages does.
+ */
+export const DEV_DB_URL =
+  (import.meta.env.VITE_DB_URL as string | undefined) ?? `${import.meta.env.BASE_URL}db`;
 
 export interface ResolvedSource {
   kind: DbSourceKind;

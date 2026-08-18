@@ -1,7 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
+    // Two output shapes: TypeScript packages emit `dist/`, plugins emit
+    // `build/plugin.wasm` from `asc`. Declaring only `dist/**` left the plugin builds
+    // uncached — and worse, a cache *hit* restored nothing, so the bundler failed on a
+    // missing module after a green build.
+    "build": { "dependsOn": ["^build"], "outputs": ["dist/**", "build/**"] },
     "typecheck": { "dependsOn": ["^build"] },
     "lint": { "dependsOn": ["^build"] },
     "clean": { "cache": false }

@@ -1,0 +1,89 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Not cancel-in-progress: a half-finished deploy would leave the site in whatever state
+# the cancelled run reached. Queueing is the right behaviour for a publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Build plugins
+        # Bundled into the app's public/ and discovered at runtime from
+        # plugins/index.json, so the deployed site carries all fourteen.
+        run: pnpm plugins:build
+
+      - name: Build the translation bundle
+        # `i18n/en/bundle.json` is generated, not tracked, so it has to be built here.
+        # Deliberately not tolerant of failure: without it the site ships no translations
+        # and the failure is *silent* — the overlay falls back to the original French,
+        # which reads as untranslated work rather than a broken deploy. It needs no
+        # database, only the authored sources under `i18n/source/`.
+        run: pnpm i18n:build
+
+      - name: Build the web app
+        env:
+          # Pages serves under /<repo>/. Vite's `base` comes from this, and every runtime
+          # fetch — plugins, translations, the database URL default — goes through
+          # `import.meta.env.BASE_URL`, so nothing is hardcoded to the root.
+          BASE_PATH: /${{ github.event.repository.name }}/
+        run: pnpm web:build
+
+      # The deployed site ships **no ECU database**, deliberately. It is 1.19 GB
+      # unpacked and not ours to redistribute. That is workable because the app can now
+      # install one itself: a visitor picks their own `ecu.zip` and it is unpacked into
+      # their browser's private filesystem. See docs/database-install.md.
+      #
+      # So a fresh visit lands on the picker, and the VIN CRC calculator works
+      # immediately because it needs no vehicle and no database.
+      - name: Check the build is self-contained
+        run: |
+          set -euo pipefail
+          test -f apps/web/dist/index.html
+          test -f apps/web/dist/plugins/index.json
+          echo "plugins: $(node -e 'console.log(require("./apps/web/dist/plugins/index.json").length)')"
+          # An absolute /assets/ reference would 404 under the subpath, silently for
+          # anything fetched at runtime. Assert the base actually got applied.
+          grep -q 'src="/${{ github.event.repository.name }}/assets/' apps/web/dist/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
