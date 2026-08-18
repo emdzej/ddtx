@@ -63,6 +63,9 @@ importers:
       '@ddtx/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@ddtx/dbimport':
+        specifier: workspace:*
+        version: link:../../packages/dbimport
       '@ddtx/elm':
         specifier: workspace:*
         version: link:../../packages/elm
@@ -114,6 +117,15 @@ importers:
       '@ddtx/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/dbimport:
+    dependencies:
+      '@ddtx/core':
+        specifier: workspace:*
+        version: link:../core
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
 
   packages/elm:
     dependencies:
@@ -176,6 +188,9 @@ importers:
       '@ddtx/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@ddtx/dbimport':
+        specifier: workspace:*
+        version: link:../../packages/dbimport
       fflate:
         specifier: ^0.8.2
         version: 0.8.3

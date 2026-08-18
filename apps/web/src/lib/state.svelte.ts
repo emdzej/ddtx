@@ -15,7 +15,6 @@ import { projectLabel } from "@ddtx/core";
 import { Overlay, type Namespace } from "@ddtx/i18n";
 import {
   EcuDatabase,
-  HttpDbSource,
   type EcuSummary,
   type PreparedLayout,
   type PreparedScreen,
@@ -56,15 +55,42 @@ import {
   testerPresentFrame,
 } from "@ddtx/screens";
 import type { LoadedEcu } from "@ddtx/db";
+import {
+  grantFolder,
+  importArchive,
+  installedManifest,
+  pickFolder,
+  removeInstalledTree,
+  resolveSavedSource,
+  storageUsage,
+  useRemote,
+  type ImportProgress,
+  type ResolvedSource,
+} from "./dbInstall.js";
+import type { TreeManifest } from "./dbImport.worker.js";
+import { clearFolderHandle, saveRemoteUrl, type DbSourceKind } from "./installStorage.js";
 
-export type Phase = "idle" | "loading" | "ready" | "error";
-
-/** Where the split tree lives. `/db` is what the dev server middleware serves. */
-const DB_URL = import.meta.env.VITE_DB_URL ?? "/db";
+/**
+ * `needs-database` is not an error state. It is the ordinary first run: no tree has
+ * been installed yet, and the answer is a picker rather than a stack trace.
+ */
+export type Phase = "idle" | "loading" | "needs-database" | "ready" | "error";
 
 interface AppState {
   phase: Phase;
   error: string | null;
+
+  /** Where the database is being read from, for the status strip and settings. */
+  dbSource: { kind: DbSourceKind; label: string } | null;
+  /** Set when a remembered folder needs its permission re-granted by a click. */
+  folderNeedsPermission: boolean;
+  /** Non-null while an archive is being checked or unpacked. */
+  importProgress: ImportProgress | null;
+  importError: string | null;
+  /** What the last import produced, so settings can show what is installed. */
+  installed: TreeManifest | null;
+  settingsOpen: boolean;
+  storage: { usage: number; quota: number } | null;
 
   /** Index facts, copied out so the UI doesn't reach into the database object. */
   ecuCount: number;
@@ -271,6 +297,13 @@ const RESULT_CAP = 400;
 export const app = $state<AppState>({
   phase: "idle",
   error: null,
+  dbSource: null,
+  folderNeedsPermission: false,
+  importProgress: null,
+  importError: null,
+  installed: null,
+  settingsOpen: false,
+  storage: null,
   ecuCount: 0,
   protocols: [],
   vehicles: [],
@@ -470,19 +503,133 @@ export async function openDatabase(): Promise<void> {
   app.phase = "loading";
   app.error = null;
   try {
-    database = await EcuDatabase.open(new HttpDbSource(DB_URL));
-    app.ecuCount = database.size;
-    app.protocols = [...database.protocols];
-    app.vehicles = buildVehicles(database);
-    app.phase = "ready";
-    applyFilters();
+    const resolved = await resolveSavedSource();
+
+    if (resolved === null) {
+      // First run, or the remembered source is gone. Not an error — offer the picker.
+      app.phase = "needs-database";
+      app.dbSource = null;
+      return;
+    }
+    if ("needsPermission" in resolved) {
+      // The handle survived the reload but its permission did not, and
+      // `requestPermission` only works inside a user gesture. So the UI has to ask.
+      app.phase = "needs-database";
+      app.folderNeedsPermission = true;
+      pendingFolder = resolved.needsPermission;
+      return;
+    }
+
+    await useSource(resolved.ok);
   } catch (cause) {
     app.phase = "error";
-    app.error =
-      cause instanceof Error
-        ? `${cause.message} — is DDTX_DB_TREE set and the tree built?`
-        : String(cause);
+    app.error = cause instanceof Error ? cause.message : String(cause);
   }
+}
+
+/** The folder whose permission lapsed, held until a click can re-request it. */
+let pendingFolder: FileSystemDirectoryHandle | null = null;
+
+/** Open a resolved source and populate the index facets from it. */
+async function useSource(resolved: ResolvedSource): Promise<void> {
+  database = await EcuDatabase.open(resolved.source);
+  app.dbSource = { kind: resolved.kind, label: resolved.label };
+  app.folderNeedsPermission = false;
+  app.ecuCount = database.size;
+  app.protocols = [...database.protocols];
+  app.vehicles = buildVehicles(database);
+  app.phase = "ready";
+  app.error = null;
+  applyFilters();
+}
+
+/** Unpack `ecu.zip` into the browser's own storage, then open it. */
+export async function installArchive(file: File): Promise<void> {
+  app.importError = null;
+  // Starts as "hashing", not "unpacking": the archive is checked against what is
+  // already installed first, and claiming to unpack during that is a label the user
+  // can catch out when the same archive is then skipped instantly.
+  app.importProgress = { phase: "hashing", done: 0, total: 0, bytesOut: 0 };
+  try {
+    const outcome = await importArchive(file, (progress) => {
+      app.importProgress = progress;
+    });
+    app.installed = outcome.manifest;
+    const resolved = await resolveSavedSource();
+    if (resolved !== null && "ok" in resolved) await useSource(resolved.ok);
+    else throw new Error("the archive unpacked but the tree could not be opened");
+  } catch (cause) {
+    app.importError = cause instanceof Error ? cause.message : String(cause);
+  } finally {
+    app.importProgress = null;
+  }
+}
+
+/** Point at an already-split tree in a folder on disk. Must be called from a click. */
+export async function chooseFolder(): Promise<void> {
+  app.importError = null;
+  const resolved = await pickFolder();
+  if (resolved === null) return;
+  try {
+    await useSource(resolved);
+  } catch (cause) {
+    app.importError =
+      `That folder does not look like a split tree — ` +
+      `${cause instanceof Error ? cause.message : String(cause)}`;
+  }
+}
+
+/** Re-grant the remembered folder's permission. Must be called from a click. */
+export async function continueWithFolder(): Promise<void> {
+  if (pendingFolder === null) return;
+  const resolved = await grantFolder(pendingFolder);
+  if (resolved === null) {
+    app.importError = "Permission was not granted, so that folder cannot be read.";
+    return;
+  }
+  await useSource(resolved);
+}
+
+/** Read the tree over HTTP — a static host, or the dev server. */
+export async function chooseRemote(url: string): Promise<void> {
+  app.importError = null;
+  saveRemoteUrl(url);
+  try {
+    await useSource(useRemote(url));
+  } catch (cause) {
+    app.importError = `Nothing readable at that URL — ${
+      cause instanceof Error ? cause.message : String(cause)
+    }`;
+  }
+}
+
+export function setSettingsOpen(open: boolean): void {
+  app.settingsOpen = open;
+  if (open) void refreshStorage();
+}
+
+async function refreshStorage(): Promise<void> {
+  app.storage = await storageUsage();
+  app.installed = await installedManifest();
+}
+
+/** Delete the installed tree and go back to the picker. */
+export async function forgetDatabase(): Promise<void> {
+  await removeInstalledTree();
+  await clearFolderHandle();
+  database = null;
+  ecu = null;
+  layout = null;
+  runtime = null;
+  app.installed = null;
+  app.dbSource = null;
+  app.selected = null;
+  app.screen = null;
+  app.snapshot = null;
+  app.categories = [];
+  app.results = [];
+  app.settingsOpen = false;
+  app.phase = "needs-database";
 }
 
 /** Every vehicle in the index, named and counted, ordered by model name. */

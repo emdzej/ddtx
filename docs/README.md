@@ -1,14 +1,15 @@
 # ddtx documentation
 
-Five documents, in the order they are useful.
+Six documents, in the order they are useful.
 
-|                                        |                                                                                                                                                                    |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [**architecture.md**](architecture.md) | How it works. Follows one value from the database to the screen and one click from the screen to the bus, which covers most of the system. Start here              |
-| [**ecu-format.md**](ecu-format.md)     | Reference for the ECU database format — every field, measured over all 1,580 ECUs, with the quirks and the outright data faults. No such reference exists upstream |
-| [**protocols.md**](protocols.md)       | What goes on the wire: ISO-TP framing, the AT sequences and why each command is there, K-line init modes, fault reads, and what a browser cannot reach             |
-| [**plan.md**](plan.md)                 | Why the port is shaped this way. Feasibility analysis, measured database survey, the reuse audit and its licensing conclusion, ranked risks, roadmap               |
-| [**i18n-overlay.md**](i18n-overlay.md) | The translation overlay. The database's strings double as its primary keys, which is what makes this non-obvious                                                   |
+|                                                |                                                                                                                                                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [**architecture.md**](architecture.md)         | How it works. Follows one value from the database to the screen and one click from the screen to the bus, which covers most of the system. Start here                                |
+| [**ecu-format.md**](ecu-format.md)             | Reference for the ECU database format — every field, measured over all 1,580 ECUs, with the quirks and the outright data faults. No such reference exists upstream                   |
+| [**protocols.md**](protocols.md)               | What goes on the wire: ISO-TP framing, the AT sequences and why each command is there, K-line init modes, fault reads, and what a browser cannot reach                               |
+| [**plan.md**](plan.md)                         | Why the port is shaped this way. Feasibility analysis, measured database survey, the reuse audit and its licensing conclusion, ranked risks, roadmap                                 |
+| [**database-install.md**](database-install.md) | How the ECU database gets into the browser: the three sources behind one `read(path)`, why the importer queues writes and drains between archive slices, and what is persisted where |
+| [**i18n-overlay.md**](i18n-overlay.md)         | The translation overlay. The database's strings double as its primary keys, which is what makes this non-obvious                                                                     |
 
 Package-level notes live next to the code:
 [`packages/elm`](../packages/elm/README.md) ·

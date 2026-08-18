@@ -15,6 +15,7 @@
     "@ddtx/codec": "workspace:*",
     "@ddtx/core": "workspace:*",
     "@ddtx/db": "workspace:*",
+    "@ddtx/dbimport": "workspace:*",
     "@ddtx/elm": "workspace:*",
     "@ddtx/i18n": "workspace:*",
     "@ddtx/link": "workspace:*",

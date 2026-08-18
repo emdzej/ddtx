@@ -5,7 +5,9 @@
   "description": "Split ecu.zip into the static per-ECU tree the web app fetches",
   "license": "GPL-3.0-or-later",
   "type": "module",
-  "bin": { "db-split": "dist/index.js" },
+  "bin": {
+    "db-split": "dist/index.js"
+  },
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit",
@@ -13,7 +15,10 @@
   },
   "dependencies": {
     "@ddtx/core": "workspace:*",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "@ddtx/dbimport": "workspace:*"
   },
-  "devDependencies": { "@types/node": "^22.13.1" }
+  "devDependencies": {
+    "@types/node": "^22.13.1"
+  }
 }

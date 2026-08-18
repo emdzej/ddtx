@@ -11,8 +11,11 @@
   import Canvas from "./components/Canvas.svelte";
   import Catalogue from "./components/Catalogue.svelte";
   import Contents from "./components/Contents.svelte";
+  import DatabasePicker from "./components/DatabasePicker.svelte";
+  import Settings from "./components/Settings.svelte";
   import Trace from "./components/Trace.svelte";
   import {
+    setSettingsOpen,
     app,
     benchLink,
     connect,
@@ -160,11 +163,22 @@
       </span>
     {/if}
 
+    <button
+      class="settings"
+      onclick={() => setSettingsOpen(true)}
+      title={app.dbSource === null ? "Database settings" : `Database: ${app.dbSource.label}`}
+    >
+      Database
+    </button>
+
     <button class="read" onclick={() => void refresh()} disabled={app.screen === null || app.refreshing}>
       {app.refreshing ? "Reading…" : "Read now"}
     </button>
   </div>
 
+  {#if app.phase === "needs-database"}
+    <DatabasePicker />
+  {:else}
   <main class:narrow={!app.catalogueOpen}>
     <Catalogue />
     <Contents />
@@ -174,10 +188,9 @@
         <p class="notice">Loading the catalogue…</p>
       {:else if app.phase === "error"}
         <div class="notice error">
-          <h2>The database tree isn't there</h2>
+          <h2>The database could not be read</h2>
           <p>{app.error}</p>
-          <pre>node tools/db-split/dist/index.js data/ecu.zip /tmp/ddtx-tree
-DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
+          <button onclick={() => setSettingsOpen(true)}>Change the source</button>
         </div>
       {:else if app.screen !== null}
         <div class="scroller">
@@ -198,6 +211,11 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
       {/if}
     </div>
   </main>
+  {/if}
+
+  {#if app.settingsOpen}
+    <Settings />
+  {/if}
 
   <!-- Always rendered, empty when there is nothing to say: the grid assigns rows
        by child order, so a conditional element here would shift `main` into the
@@ -240,6 +258,14 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
 
   main {
     grid-row: 3;
+  }
+
+  /* Takes the row `main` would have had. Without this the picker lands in the
+     auto-sized row and the tricolour footer gets pushed off-screen — the same
+     class of bug as the conditional notice row. */
+  :global(.picker) {
+    grid-row: 3;
+    min-height: 0;
   }
 
   .tricolour {
@@ -305,7 +331,19 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
     color: var(--red);
   }
 
+  /*
+   * The strip is a single flex row with fixed-width controls, so the only flexible
+   * item is this one — and a flex item's default `min-width: auto` means it refuses
+   * to shrink below its longest word and pushes its text out of the strip instead.
+   * Clipping to one line keeps the connection state legible and the strip one row
+   * tall at any width.
+   */
   .claim {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: #a7abd8;
   }
 
@@ -358,6 +396,21 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
   .link-button:disabled {
     color: rgba(255, 255, 255, 0.5);
     cursor: not-allowed;
+  }
+
+  /* Same treatment as the connection controls: this is a mode switch, not the
+     primary action, and it must not read as disabled the way an unstyled button
+     against the blue strip does. */
+  .settings {
+    padding: 3px 11px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+  }
+
+  .settings:hover {
+    background: rgba(255, 255, 255, 0.24);
   }
 
   .unsupported {
@@ -486,16 +539,6 @@ DDTX_DB_TREE=/tmp/ddtx-tree pnpm --filter @ddtx/web dev</pre>
     color: var(--ink);
   }
 
-  .notice pre {
-    margin: 12px 0 0;
-    padding: 9px 10px;
-    background: var(--paper);
-    border: 1px solid var(--rule-soft);
-    font-family: var(--mono);
-    font-size: 11px;
-    white-space: pre-wrap;
-    color: var(--ink);
-  }
 
   /* Below a laptop, the two index columns stack above the stage rather than
      squeezing the canvas, which is the one thing that must stay legible. */
