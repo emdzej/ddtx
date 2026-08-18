@@ -18,7 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history so the notes can list what changed since the previous tag.
+          # The tag, not the branch. On a `workflow_dispatch` the default checkout is the
+          # default branch, so without this a manually-triggered release would package
+          # whatever is on main and label it with the tag — an artifact and a version
+          # that disagree, with no way to tell afterwards which is right.
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          # Full history and tags, so the notes can diff against the previous tag.
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
