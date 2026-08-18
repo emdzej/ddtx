@@ -4,7 +4,7 @@
   "category": "Airbag Tools",
   "ecu": "MRSZ_X95_L38_L43_L47_20110505T101858",
   "capabilities": ["session", "read", "write"],
-  "description": "Port of megane3_ab_reset.py.",
+  "description": "Reads the pre-crash state, then clears the crash record so the module can be reused.",
   "warning": "Clears the stored crash record on the airbag module. Irreversible, and it destroys the evidence of an accident.",
   "_origin": "src/ddt4all/plugins/megane3_ab_reset.py",
   "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."

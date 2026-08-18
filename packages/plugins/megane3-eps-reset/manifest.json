@@ -4,7 +4,7 @@
   "category": "EPS Tools",
   "ecu": "DAE_X95_X38_X10_v1.88_20120228T113904",
   "capabilities": ["session", "read", "write"],
-  "description": "Port of megane3_eps_reset.py.",
+  "description": "Reads the dongle state, then blanks it so the steering column can be paired to another vehicle.",
   "warning": "Blanks the steering column's dongle pairing, which unpairs it from the vehicle.",
   "_origin": "src/ddt4all/plugins/megane3_eps_reset.py",
   "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."

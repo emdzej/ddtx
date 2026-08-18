@@ -135,12 +135,40 @@ aimed at the wrong module is exactly the kind of mistake worth making impossible
 
 ---
 
-## 4. What is deliberately not carried over
+## 4. Running one
+
+The panel groups procedures by category, as the original's menu did. A plugin names its
+own ECU, so running one loads that ECU and attaches to it for the duration — whatever the
+catalogue has selected — and re-opens the previously-open screen afterwards, because a
+procedure must not leave the adapter pointed somewhere the UI does not think it is.
+
+Writes go through `checkWriteGates` and the adapter lock, exactly as a button press does,
+and the confirmation happens **once per run** rather than once per write: a procedure with
+four writes asking four times is how people learn to click through confirmations.
+
+Demo mode runs procedures against `SimulatedLink`, so the sequence and the UI can be
+exercised with no vehicle. What that does not tell you is whether the sequence has the
+intended effect — see §5.
+
+A plugin that names no ECU needs no database either. The VIN calculator runs before a tree
+has ever been imported, which is the state a new user is in; a calculator refusing to add
+up because the ECU catalogue is missing would be absurd, and it took running it in a
+browser to notice the guard was written that way.
+
+---
+
+## 5. What is deliberately not carried over
 
 **The PyQt dialogs.** Every original plugin builds its own window — tables, buttons,
 labels. Reproducing that would mean a UI toolkit inside the sandbox. Instead a plugin
 `log`s, `ask`s for input, and `done`s with a result; the host renders those three
 things consistently. A plugin that genuinely needs a table can emit rows as log lines.
+
+One consequence is worth calling out as a gain rather than a compromise: because the
+host renders every procedure, every procedure states its `warning` **before** the Run
+button, in the list, rather than in a confirmation dialog after the decision to run has
+already been made. The originals put those words in a label inside their own window;
+here they are unavoidable.
 
 **`need_hw = False` as a special case.** `vin_crc` is the only one, and rather than
 model "plugins that need no ECU", it simply declares no capabilities and never emits a
@@ -148,7 +176,7 @@ model "plugins that need no ECU", it simply declares no capabilities and never e
 
 ---
 
-## 5. Honest status of the ported procedures
+## 6. Honest status of the ported procedures
 
 `vin-crc` is pure arithmetic and **verified**: CRC-16/X-25 over the VIN's ASCII bytes,
 byte-swapped as the original returns it. Its raw CRC over `"123456789"` is `0x906E`, the

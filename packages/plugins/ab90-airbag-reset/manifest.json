@@ -4,7 +4,7 @@
   "category": "Airbag Tools",
   "ecu": "AB90_J77_X85",
   "capabilities": ["session", "read", "write"],
-  "description": "Port of ab90_reset.py.",
+  "description": "Reads whether a crash is recorded, then clears the crash record so the module can be reused.",
   "warning": "Clears the stored crash record on the airbag module. Irreversible, and it destroys the evidence of an accident.",
   "_origin": "src/ddt4all/plugins/ab90_reset.py",
   "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."

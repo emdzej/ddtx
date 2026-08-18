@@ -75,6 +75,9 @@ importers:
       '@ddtx/link':
         specifier: workspace:*
         version: link:../../packages/link
+      '@ddtx/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
       '@ddtx/screens':
         specifier: workspace:*
         version: link:../../packages/screens

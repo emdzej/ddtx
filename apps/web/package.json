@@ -19,6 +19,7 @@
     "@ddtx/elm": "workspace:*",
     "@ddtx/i18n": "workspace:*",
     "@ddtx/link": "workspace:*",
+    "@ddtx/plugin-sdk": "workspace:*",
     "@ddtx/screens": "workspace:*",
     "@ddtx/session": "workspace:*"
   },

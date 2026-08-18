@@ -31,6 +31,7 @@ import {
 } from "@ddtx/elm";
 import {
   attachEcu,
+  runPlugin,
   checkWriteGates,
   scanAll,
   type ProbeResult,
@@ -69,6 +70,8 @@ import {
 } from "./dbInstall.js";
 import type { TreeManifest } from "./dbImport.worker.js";
 import { clearFolderHandle, saveRemoteUrl, type DbSourceKind } from "./installStorage.js";
+import { discoverPlugins, hostFor, loadPluginModule } from "./plugins.js";
+import type { PluginManifest } from "@ddtx/plugin-sdk";
 
 /**
  * `needs-database` is not an error state. It is the ordinary first run: no tree has
@@ -91,6 +94,14 @@ interface AppState {
   installed: TreeManifest | null;
   settingsOpen: boolean;
   storage: { usage: number; quota: number } | null;
+
+  /** Plugins found in the bundle, grouped in the UI by category. */
+  plugins: PluginManifest[];
+  pluginsOpen: boolean;
+  /** The plugin currently running, and what it has said so far. */
+  pluginRunning: string | null;
+  pluginLog: string[];
+  pluginOutcome: { status: "ok" | "failed" | "aborted"; text: string } | null;
 
   /** Index facts, copied out so the UI doesn't reach into the database object. */
   ecuCount: number;
@@ -304,6 +315,11 @@ export const app = $state<AppState>({
   installed: null,
   settingsOpen: false,
   storage: null,
+  plugins: [],
+  pluginsOpen: false,
+  pluginRunning: null,
+  pluginLog: [],
+  pluginOutcome: null,
   ecuCount: 0,
   protocols: [],
   vehicles: [],
@@ -600,6 +616,122 @@ export async function chooseRemote(url: string): Promise<void> {
     app.importError = `Nothing readable at that URL — ${
       cause instanceof Error ? cause.message : String(cause)
     }`;
+  }
+}
+
+/* ── plugins ───────────────────────────────────────────────────────────────── */
+
+export function setPluginsOpen(open: boolean): void {
+  app.pluginsOpen = open;
+}
+
+/** Read the plugin bundle. Called once at startup; no plugins is not an error. */
+export async function loadPlugins(): Promise<void> {
+  app.plugins = await discoverPlugins();
+}
+
+/**
+ * Run a plugin.
+ *
+ * The plugin names its own ECU, which is usually not the one selected in the catalogue,
+ * so that ECU is loaded and — on a vehicle — attached for the duration. Afterwards the
+ * previously-open screen is re-opened, which re-attaches its ECU: a plugin must not
+ * leave the adapter pointed somewhere the UI does not think it is.
+ */
+export async function runPluginByName(name: string): Promise<void> {
+  const manifest = app.plugins.find((entry) => entry.name === name);
+  if (manifest === undefined || app.pluginRunning !== null) return;
+
+  // A database is needed only to load the ECU a plugin names. The VIN calculator names
+  // none, so it runs with no tree installed at all — which is exactly the state a user
+  // is in before they have imported one, and a calculator refusing to add up because
+  // the ECU catalogue is missing would be absurd.
+  if (manifest.ecu !== undefined && database === null) {
+    app.pluginOutcome = {
+      status: "aborted",
+      text: `This procedure needs the ${manifest.ecu} definitions, and no database is installed.`,
+    };
+    app.pluginsOpen = true;
+    return;
+  }
+
+  app.pluginRunning = name;
+  app.pluginLog = [];
+  app.pluginOutcome = null;
+  const previousScreen = app.screen?.name;
+
+  try {
+    const module = await loadPluginModule(manifest);
+
+    // A plugin with no ECU touches no bus — the VIN calculator. It gets a host whose
+    // read and write can never be reached, because it declares neither capability.
+    let pluginEcu: LoadedEcu | null = null;
+    let link: EcuLink | null = null;
+
+    if (manifest.ecu !== undefined && database !== null) {
+      pluginEcu = await database.loadEcu(manifest.ecu);
+      if (driver !== null) {
+        app.pluginLog = [...app.pluginLog, `Attaching to ${pluginEcu.def.ecuname}…`];
+        await attachEcu(driver, pluginEcu);
+        link = new ElmLink(driver);
+      } else {
+        link = new SimulatedLink(pluginEcu.requests, { fill: app.fill, drift: app.drift });
+      }
+    }
+
+    const live = isLive();
+    const host = hostFor({
+      ecu: pluginEcu,
+      link,
+      live,
+      writeRefusal: () => {
+        if (!live) return null;
+        const gate = checkWriteGates({ writesEnabled: app.writesEnabled, live: true });
+        return gate.allowed ? null : (gate.reason ?? "Not allowed.");
+      },
+      confirmWrite: () =>
+        Promise.resolve(
+          !live ||
+            globalThis.confirm(
+              `${manifest.label}\n\n${manifest.warning ?? "This procedure writes to the vehicle."}` +
+                `\n\nContinue?`,
+            ),
+        ),
+      log: (text) => {
+        app.pluginLog = [...app.pluginLog, text];
+      },
+      ask: (prompt) => Promise.resolve(globalThis.prompt(prompt)),
+      onExchange: (sent, received, requestName) => {
+        app.pluginLog = [
+          ...app.pluginLog,
+          `→ ${requestName}: ${sent}  ←  ${received || "(nothing)"}`,
+        ];
+      },
+    });
+
+    // Writes go through the adapter lock, same as a button press, so two tabs cannot
+    // drive a procedure into the same module at once.
+    const outcome = live
+      ? await withAdapterLock(() => runPlugin(manifest, module.exports, host))
+      : { ran: true as const, value: await runPlugin(manifest, module.exports, host) };
+
+    if (!outcome.ran) {
+      app.pluginOutcome = {
+        status: "aborted",
+        text: "Another ddtx tab is using this adapter.",
+      };
+    } else if (outcome.value !== undefined) {
+      app.pluginOutcome = { status: outcome.value.status, text: outcome.value.text };
+    }
+  } catch (cause) {
+    app.pluginOutcome = {
+      status: "aborted",
+      text: cause instanceof Error ? cause.message : String(cause),
+    };
+  } finally {
+    app.pluginRunning = null;
+    // Put the adapter back where the UI thinks it is.
+    if (previousScreen !== undefined) await openScreen(previousScreen);
   }
 }
 

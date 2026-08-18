@@ -12,9 +12,12 @@
   import Catalogue from "./components/Catalogue.svelte";
   import Contents from "./components/Contents.svelte";
   import DatabasePicker from "./components/DatabasePicker.svelte";
+  import Plugins from "./components/Plugins.svelte";
   import Settings from "./components/Settings.svelte";
   import Trace from "./components/Trace.svelte";
   import {
+    loadPlugins,
+    setPluginsOpen,
     setSettingsOpen,
     app,
     benchLink,
@@ -27,7 +30,12 @@
     setLocale,
   } from "./lib/state.svelte.js";
 
-  onMount(() => void openDatabase());
+  onMount(() => {
+    void openDatabase();
+    // Independent of the database: a plugin bundle can be present with no tree, and the
+    // VIN calculator works either way.
+    void loadPlugins();
+  });
 
   /**
    * The mode indicator is read off reactive state, never set by hand.
@@ -163,6 +171,16 @@
       </span>
     {/if}
 
+    {#if app.plugins.length > 0}
+      <button
+        class="settings"
+        onclick={() => setPluginsOpen(true)}
+        title="Ported DDT4All procedures"
+      >
+        Procedures
+      </button>
+    {/if}
+
     <button
       class="settings"
       onclick={() => setSettingsOpen(true)}
@@ -215,6 +233,10 @@
 
   {#if app.settingsOpen}
     <Settings />
+  {/if}
+
+  {#if app.pluginsOpen}
+    <Plugins />
   {/if}
 
   <!-- Always rendered, empty when there is nothing to say: the grid assigns rows

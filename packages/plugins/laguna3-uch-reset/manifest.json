@@ -4,7 +4,7 @@
   "category": "UCH Tools",
   "ecu": "BCM_X91_L43_S_S_SWC_v1.30_20140613T140906",
   "capabilities": ["session", "read", "write"],
-  "description": "Port of laguna3_uch_reset.py.",
+  "description": "Erases the body module’s learned identifiers, ready to be re-learned to a vehicle.",
   "warning": "Erases the body module's learned identifiers. The vehicle will not start until keys are re-learned.",
   "_origin": "src/ddt4all/plugins/laguna3_uch_reset.py",
   "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."
