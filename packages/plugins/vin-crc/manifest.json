@@ -1,0 +1,8 @@
+{
+  "name": "vin-crc",
+  "label": "VIN CRC calculator",
+  "category": "VIN",
+  "capabilities": ["ask"],
+  "description": "Computes the CRC a Renault ECU expects alongside a VIN. Needs no vehicle.",
+  "_note": "The only original plugin with need_hw = False. It declares no read or write capability, so it cannot touch a bus even if it tried."
+}

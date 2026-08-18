@@ -23,6 +23,7 @@
     "@ddtx/core": "workspace:*",
     "@ddtx/db": "workspace:*",
     "@ddtx/elm": "workspace:*",
-    "@ddtx/link": "workspace:*"
+    "@ddtx/link": "workspace:*",
+    "@ddtx/plugin-sdk": "workspace:*"
   }
 }

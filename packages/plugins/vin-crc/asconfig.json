@@ -1,0 +1,15 @@
+{
+  "targets": {
+    "release": {
+      "outFile": "build/plugin.wasm",
+      "textFile": "build/plugin.wat",
+      "sourceMap": false,
+      "optimizeLevel": 3,
+      "shrinkLevel": 2,
+      "converge": false,
+      "noAssert": true,
+      "runtime": "stub"
+    }
+  },
+  "options": { "use": ["abort="] }
+}

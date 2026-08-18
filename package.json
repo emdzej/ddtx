@@ -2,13 +2,13 @@
   "name": "ddtx",
   "private": true,
   "version": "0.1.0",
-  "description": "Browser-based Renault/Dacia/Nissan ECU diagnostics — a TypeScript port of DDT4All",
+  "description": "Browser-based Renault/Dacia/Nissan ECU diagnostics \u2014 a TypeScript port of DDT4All",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "packageManager": "pnpm@10.33.1",
   "scripts": {
     "build": "turbo run build",
-    "dev": "pnpm db:split && pnpm --filter @ddtx/web dev",
+    "dev": "pnpm db:split && pnpm plugins:build && pnpm --filter @ddtx/web dev",
     "db:split": "pnpm --filter @ddtx/db-split build && node tools/db-split/dist/index.js data/ecu.zip data/tree --if-needed",
     "db:split:force": "node tools/db-split/dist/index.js data/ecu.zip data/tree",
     "web:build": "pnpm --filter @ddtx/web build",
@@ -24,7 +24,8 @@
     "check": "turbo run build typecheck && pnpm --filter @ddtx/web typecheck && pnpm test:db",
     "i18n:extract": "python3 tools/i18n/extract.py extract data/tree /tmp/ddtx-i18n.json",
     "i18n:build": "python3 tools/i18n/extract.py build data/tree en i18n/source/en i18n/en",
-    "i18n:coverage": "python3 tools/i18n/extract.py coverage data/tree i18n/source/en"
+    "i18n:coverage": "python3 tools/i18n/extract.py coverage data/tree i18n/source/en",
+    "plugins:build": "pnpm --filter \"./packages/plugins/*\" run build && node tools/bundle-plugins.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.13.1",

@@ -10,3 +10,8 @@ data/
 tools/golden/vectors/db.json
 __pycache__/
 *.pyc
+
+# Compiled plugin modules and the bundle the host serves. Both are build output:
+# `pnpm plugins:build` regenerates them in about a second.
+packages/plugins/*/build/
+apps/web/public/plugins/

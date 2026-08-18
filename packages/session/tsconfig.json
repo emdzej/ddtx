@@ -12,6 +12,7 @@
     { "path": "../codec" },
     { "path": "../db" },
     { "path": "../elm" },
-    { "path": "../link" }
+    { "path": "../link" },
+    { "path": "../plugin-sdk" }
   ]
 }

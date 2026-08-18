@@ -1,5 +1,8 @@
 packages:
   - "packages/*"
+  # Nested one level deeper than the rest: `packages/*` matches `packages/plugins`,
+  # which is a container rather than a package, and misses the plugins inside it.
+  - "packages/plugins/*"
   - "apps/*"
   - "tools/*"
 
