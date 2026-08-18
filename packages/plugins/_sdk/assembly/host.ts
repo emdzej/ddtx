@@ -52,6 +52,11 @@ export function session(request: string): i32 {
   return emit('{"op":"session","request":"' + escape(request) + '"}');
 }
 
+/** A parameterised session request. `values` is pre-built JSON. */
+export function sessionWith(request: string, values: string): i32 {
+  return emit('{"op":"session","request":"' + escape(request) + '","values":' + values + "}");
+}
+
 export function read(request: string): i32 {
   return emit('{"op":"read","request":"' + escape(request) + '"}');
 }

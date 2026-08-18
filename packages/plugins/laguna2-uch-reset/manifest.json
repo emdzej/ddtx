@@ -1,0 +1,11 @@
+{
+  "name": "laguna2-uch-reset",
+  "label": "Laguna II UCH reset",
+  "category": "UCH Tools",
+  "ecu": "UCH___M2S_X74_et_X73",
+  "capabilities": ["session", "read", "write"],
+  "description": "Port of laguna2_uch_reset.py.",
+  "warning": "Erases the immobiliser and access data. The vehicle will not start until keys are re-learned.",
+  "_origin": "src/ddt4all/plugins/laguna2_uch_reset.py",
+  "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."
+}

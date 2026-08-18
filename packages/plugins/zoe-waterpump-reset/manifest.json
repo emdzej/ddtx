@@ -1,0 +1,12 @@
+{
+  "name": "zoe-waterpump-reset",
+  "label": "Zoe water pump counter reset",
+  "category": "EVC Tools",
+  "ecu": "EVC_3180_RH5_170_V1.0_20190708T170839",
+  "capabilities": ["session", "read", "write"],
+  "description": "Reads then clears the four driving water-pump time counters.",
+  "warning": "Erases the water pump run-time counters. Irreversible, and it destroys the service history the counters represent.",
+  "_origin": "src/ddt4all/plugins/zoe_waterpump_counter_reset.py",
+  "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not.",
+  "_substitution": "The original names EVC_3180_RH5_510_V1.1_20210422T184714, which this database snapshot does not carry. Pointed at EVC_3180_RH5_170_V1.0 instead — the same module at a different version, which does define all four counter requests. Unverified."
+}

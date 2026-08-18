@@ -1,0 +1,11 @@
+{
+  "name": "megane2-uch-reset",
+  "label": "Megane / Scenic II UCH reset",
+  "category": "UCH Tools",
+  "ecu": "UCH_84_J84_03_60",
+  "capabilities": ["session", "read", "write"],
+  "description": "Port of megane2_uch_reset.py.",
+  "warning": "Erases the UCH's EEPROM, which clears the immobiliser and access learning. The vehicle will not start until keys are re-learned.",
+  "_origin": "src/ddt4all/plugins/megane2_uch_reset.py",
+  "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."
+}

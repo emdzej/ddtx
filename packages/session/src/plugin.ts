@@ -29,8 +29,8 @@ import {
 
 /** What the host must be able to do on the plugin's behalf. */
 export interface PluginHost {
-  /** Open a diagnostic session. */
-  session(request: string): Promise<PluginResult>;
+  /** Open a diagnostic session. `values` is set for parameterised session requests. */
+  session(request: string, values?: Record<string, string>): Promise<PluginResult>;
   /** Send a request and decode the reply. */
   read(request: string): Promise<PluginResult>;
   /**
@@ -140,7 +140,7 @@ export async function runPlugin(
 async function perform(command: PluginCommand, host: PluginHost): Promise<PluginResult> {
   switch (command.op) {
     case "session":
-      return host.session(command.request);
+      return host.session(command.request, command.values);
     case "read":
       return host.read(command.request);
     case "write":

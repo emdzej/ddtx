@@ -1,0 +1,11 @@
+{
+  "name": "clio3-eps-write-vin",
+  "label": "Modus / Clio III EPS — write VIN",
+  "category": "EPS Tools",
+  "ecu": "DAE_J77_X85_Gen2___v3.7",
+  "capabilities": ["session", "read", "write", "ask"],
+  "description": "Writes a VIN and its CRC to the steering column.",
+  "warning": "Writes the VIN into the steering column. A wrong VIN or CRC leaves the module paired to a vehicle that does not exist.",
+  "_origin": "src/ddt4all/plugins/clio3_eps_reset.py",
+  "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."
+}

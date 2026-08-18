@@ -1,0 +1,12 @@
+{
+  "name": "megane2-card-programming",
+  "label": "Megane / Scenic II card programming",
+  "category": "Keys",
+  "ecu": "UCH_84_J84_03_60",
+  "capabilities": ["session", "read", "write", "ask"],
+  "description": "Enters after-sales mode, learns a card, then validates or abandons.",
+  "warning": "Learns a new card into the UCH. Validating replaces the learned set — cards not present during the procedure stop working.",
+  "_origin": "src/ddt4all/plugins/card_programming.py",
+  "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not.",
+  "_scope": "Ports the documented badge-learning sequence only. The original also derives the after-sales PIN from the module's ISK via two bespoke routines; that derivation is not ported, and the operator supplies the code instead — which the original's UI also allows."
+}

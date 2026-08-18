@@ -1,0 +1,11 @@
+{
+  "name": "clio3-eps-reset",
+  "label": "Modus / Clio III EPS reset",
+  "category": "EPS Tools",
+  "ecu": "DAE_J77_X85_Gen2___v3.7",
+  "capabilities": ["session", "read", "write"],
+  "description": "Erases the dongle ID code on the steering column.",
+  "warning": "Erases the dongle ID pairing on the steering column, which unpairs it from the vehicle.",
+  "_origin": "src/ddt4all/plugins/clio3_eps_reset.py",
+  "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."
+}

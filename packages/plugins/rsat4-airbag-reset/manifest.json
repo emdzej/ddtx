@@ -1,0 +1,11 @@
+{
+  "name": "rsat4-airbag-reset",
+  "label": "RSAT4 airbag reset",
+  "category": "Airbag Tools",
+  "ecu": "RSAT4_ACU_eng_v15_20150511T131328",
+  "capabilities": ["session", "read", "write"],
+  "description": "Port of rsat4_reset.py.",
+  "warning": "Clears the stored crash record on the airbag module. Irreversible, and it destroys the evidence of an accident.",
+  "_origin": "src/ddt4all/plugins/rsat4_reset.py",
+  "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."
+}

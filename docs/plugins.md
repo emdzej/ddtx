@@ -1,9 +1,13 @@
 # Plugins
 
-DDT4All ships fourteen plugins: a VIN CRC calculator and thirteen procedures — UCH,
-EPS and airbag resets, card programming, a Zoe water-pump counter reset. They are
-Python modules loaded with `SourceFileLoader` from a folder, each exporting
-`plugin_name`, `category`, `need_hw` and a `plugin_entry()` that opens a PyQt5 dialog.
+DDT4All ships thirteen plugins: a VIN CRC calculator and twelve procedures — UCH, EPS
+and airbag resets, card programming, a Zoe water-pump counter reset. They are Python
+modules loaded with `SourceFileLoader` from a folder, each exporting `plugin_name`,
+`category`, `need_hw` and a `plugin_entry()` that opens a PyQt5 dialog.
+
+All thirteen are ported, as **fourteen** plugins here: `clio3_eps_reset.py`'s dialog does
+two unrelated things — erase a dongle and write a VIN — so it became two procedures
+rather than one sequence with a mode flag.
 
 Here they are **WebAssembly modules with no imports**. This document is why, and what
 the contract is.
@@ -13,7 +17,7 @@ the contract is.
 ## 1. What a plugin actually does
 
 Worth establishing before designing anything, because it decides the shape. The API
-surface all fourteen use, counted across the original sources:
+surface all thirteen use, counted across the original sources:
 
 | Call                                 | Uses | ddtx equivalent            |
 | ------------------------------------ | ---- | -------------------------- |
@@ -26,9 +30,9 @@ surface all fourteen use, counted across the original sources:
 | `EcuFile(slug, True)`                | 12   | `database.loadEcu(slug)`   |
 
 So a plugin is: **load a named ECU, send named requests in a sequence, decide based on
-what came back, show the result.** Not one of them computes anything the database
-cannot already express — except `vin_crc`, which is pure arithmetic and touches no
-hardware at all.
+what came back, show the result.** Only two compute anything the database cannot express:
+`vin_crc`, which is pure arithmetic and touches no hardware, and `card_programming`,
+which derives an after-sales PIN from the module's ISK.
 
 That is the important finding. A plugin is an **I/O sequence**, and it is why the
 image-filter ABI in `svelte-wasm-plugins` cannot be reused as-is.
@@ -146,17 +150,49 @@ model "plugins that need no ECU", it simply declares no capabilities and never e
 
 ## 5. Honest status of the ported procedures
 
-`vin_crc` is pure arithmetic — CRC-16/X-25 over the VIN's ASCII bytes, returned
-byte-swapped — and is verified against the algorithm's published check value
-(`0x906E` over `"123456789"`). It needs no vehicle and is trustworthy.
+`vin-crc` is pure arithmetic and **verified**: CRC-16/X-25 over the VIN's ASCII bytes,
+byte-swapped as the original returns it. Its raw CRC over `"123456789"` is `0x906E`, the
+algorithm's own published check value, and it agrees with an independent implementation on
+a real VIN. It declares only `ask`, so it cannot touch a bus.
 
-The other thirteen are **destructive procedures that cannot be verified without a
-car**: airbag module resets, EEPROM writes, card programming. Each names request
-names and an ECU slug, and those _can_ be checked against the real database without
-hardware — a typo in a request name is a load-time failure rather than a mystery at a
-vehicle, and that check runs over the whole corpus. What cannot be checked is whether
-the sequence has the intended effect on a real module.
+The other thirteen are procedures against real modules — airbag resets, EEPROM erases,
+card programming — and **cannot be verified without a vehicle**. What _can_ be checked
+without one, and is:
 
-So they are gated: write capability requires the write toggle, the confirmation names
-the manifest's own `warning` verbatim, and the UI marks them unverified. That is the
-same posture as the rest of the write path, for the same reason.
+| Check                                                  | Result      |
+| ------------------------------------------------------ | ----------- |
+| ECU slug exists in the database                        | 13 / 13     |
+| Every request name the plugin emits exists in that ECU | **51 / 51** |
+| No plugin uses a capability its manifest omits         | 14 / 14     |
+| Every plugin that can write carries a warning          | 14 / 14     |
+| No module declares a WebAssembly import                | 14 / 14     |
+
+That check runs the plugins rather than scanning their source for string literals, so it
+sees names built by concatenation — the Zoe counters are `"DataRead." + LOW`, which a
+literal scan would miss. A wrong request name therefore fails on a laptop instead of at a
+vehicle, mid-sequence, after a session has already been opened.
+
+What it cannot tell you is whether a sequence has its intended effect. So every one is
+gated behind the write toggle, its confirmation shows the manifest's own `warning`
+verbatim, and its manifest carries `_unverified`.
+
+### Two substitutions worth knowing about
+
+Two plugins name an ECU this database snapshot does not carry. Both were pointed at the
+same module at a different version, which does define every request they use:
+
+| Plugin                | Original slug                                                 | Used instead                            |
+| --------------------- | ------------------------------------------------------------- | --------------------------------------- |
+| `clio4-eps-reset`     | `X98ph2_X87ph2_EPS_HFP_v1.00_20150622T140219_20160726T172209` | `X98_87Ph2_EPS_HFP_v3_20171127T154713`  |
+| `zoe-waterpump-reset` | `EVC_3180_RH5_510_V1.1_20210422T184714`                       | `EVC_3180_RH5_170_V1.0_20190708T170839` |
+
+The request names all match, which is a good sign and not a guarantee. Both are marked
+`_substitution` in their manifests.
+
+### One thing deliberately not ported
+
+`card_programming` derives the after-sales code from the module's ISK, through two
+bespoke routines transcribed from the immobiliser's key schedule. That derivation is not
+reproduced: it cannot be tested against a module, and a wrong code would be sent to a
+live immobiliser. The operator supplies the code instead, which the original's dialog
+also allows — it has a field for exactly that.

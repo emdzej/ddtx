@@ -1,0 +1,11 @@
+{
+  "name": "ab90-airbag-reset",
+  "label": "AB90 airbag reset",
+  "category": "Airbag Tools",
+  "ecu": "AB90_J77_X85",
+  "capabilities": ["session", "read", "write"],
+  "description": "Port of ab90_reset.py.",
+  "warning": "Clears the stored crash record on the airbag module. Irreversible, and it destroys the evidence of an accident.",
+  "_origin": "src/ddt4all/plugins/ab90_reset.py",
+  "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."
+}

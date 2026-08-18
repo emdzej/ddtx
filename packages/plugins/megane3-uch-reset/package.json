@@ -1,0 +1,13 @@
+{
+  "name": "@ddtx/plugin-megane3-uch-reset",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "asc assembly/index.ts --config asconfig.json --target release",
+    "clean": "rm -rf build"
+  },
+  "devDependencies": {
+    "assemblyscript": "^0.27.29"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "clio4-eps-reset",
+  "label": "Clio IV EPS reset",
+  "category": "EPS Tools",
+  "ecu": "X98_87Ph2_EPS_HFP_v3_20171127T154713",
+  "capabilities": ["session", "read", "write"],
+  "description": "Port of clio4_eps_reset.py.",
+  "warning": "Blanks the steering column's dongle pairing, which unpairs it from the vehicle.",
+  "_origin": "src/ddt4all/plugins/clio4_eps_reset.py",
+  "_unverified": "Not run against a vehicle. Slug and request names are checked against the database; the effect is not."
+}

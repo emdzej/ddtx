@@ -92,6 +92,14 @@ export interface PluginExports {
 export interface SessionCommand {
   op: "session";
   request: string;
+  /**
+   * Values for the session request, keyed by data name.
+   *
+   * Needed because several session requests are parameterised rather than fixed —
+   * `Start Diagnostic Session` on the Laguna II UCH takes a `Session Name` of `Etude`
+   * or `APV`, and the two do different things.
+   */
+  values?: Record<string, string>;
 }
 
 export interface ReadCommand {

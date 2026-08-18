@@ -60,28 +60,29 @@ export function parseCommand(json: string): PluginCommand {
   const op = command.op;
 
   switch (op) {
-    case "session":
     case "read":
       if (typeof command.request !== "string" || command.request.length === 0) {
-        throw new PluginProtocolError(`${op} command has no request name`);
+        throw new PluginProtocolError("read command has no request name");
       }
-      return { op, request: command.request };
+      return { op: "read", request: command.request };
+
+    case "session": {
+      if (typeof command.request !== "string" || command.request.length === 0) {
+        throw new PluginProtocolError("session command has no request name");
+      }
+      const values = readValues(command.values);
+      // Absent rather than empty when there are none, so a fixed session request and a
+      // parameterised one are distinguishable in a trace.
+      return Object.keys(values).length === 0
+        ? { op: "session", request: command.request }
+        : { op: "session", request: command.request, values };
+    }
 
     case "write": {
       if (typeof command.request !== "string" || command.request.length === 0) {
         throw new PluginProtocolError("write command has no request name");
       }
-      const values: Record<string, string> = {};
-      const raw = command.values;
-      if (typeof raw === "object" && raw !== null) {
-        for (const [key, entry] of Object.entries(raw)) {
-          // Coerced to string because `buildDataStream` looks enum labels back up by
-          // text, and the original plugins pass integers and strings interchangeably —
-          // `send_request({"…": 0})` and `send_request({"…": "0"})` both appear.
-          values[key] = typeof entry === "string" ? entry : String(entry);
-        }
-      }
-      return { op: "write", request: command.request, values };
+      return { op: "write", request: command.request, values: readValues(command.values) };
     }
 
     case "log":
@@ -107,6 +108,23 @@ export function parseCommand(json: string): PluginCommand {
     default:
       throw new PluginProtocolError(`plugin emitted an unknown op: ${JSON.stringify(op)}`);
   }
+}
+
+/**
+ * Coerce a values object to `Record<string, string>`.
+ *
+ * String coercion matters: `buildDataStream` looks enum labels back up by text, and the
+ * original plugins pass integers and strings interchangeably — `send_request({"…": 0})`
+ * and `send_request({"…": "0"})` both appear in the same file.
+ */
+function readValues(raw: unknown): Record<string, string> {
+  const values: Record<string, string> = {};
+  if (typeof raw === "object" && raw !== null) {
+    for (const [key, entry] of Object.entries(raw)) {
+      values[key] = typeof entry === "string" ? entry : String(entry);
+    }
+  }
+  return values;
 }
 
 export function encodeResult(result: PluginResult): string {
