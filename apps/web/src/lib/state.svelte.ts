@@ -305,6 +305,23 @@ export interface Facet {
 
 const RESULT_CAP = 400;
 
+/**
+ * The defaults the popover triggers compare against to decide whether to show a dot.
+ *
+ * Named rather than repeated, because the comparison and the initial value have to
+ * agree: an indicator that is on by default says nothing, and one that never lights
+ * says less. This was written as `zoom !== "fit"` first, against a default of 100, so
+ * the dot was permanent.
+ */
+export const VIEW_DEFAULTS = {
+  fill: "pad" as FillMode,
+  drift: false,
+  inspect: false,
+  zoom: 100 as number | "fit",
+  locale: "fr",
+  showUntranslated: false,
+} as const;
+
 export const app = $state<AppState>({
   phase: "idle",
   error: null,
@@ -339,17 +356,17 @@ export const app = $state<AppState>({
   screen: null,
   snapshot: null,
   refreshing: false,
-  fill: "pad",
-  drift: false,
+  fill: VIEW_DEFAULTS.fill,
+  drift: VIEW_DEFAULTS.drift,
   autoRefresh: false,
-  inspect: false,
-  zoom: 100,
+  inspect: VIEW_DEFAULTS.inspect,
+  zoom: VIEW_DEFAULTS.zoom,
   catalogueOpen: readFlag(CATALOGUE_KEY, true),
   traceOpen: readFlag(TRACE_KEY, false),
-  locale: "fr",
+  locale: VIEW_DEFAULTS.locale,
   overlaySize: 0,
   overlayVersion: 0,
-  showUntranslated: false,
+  showUntranslated: VIEW_DEFAULTS.showUntranslated,
   serialSupported: typeof navigator !== "undefined" && "serial" in navigator,
   linkKind: "simulated",
   connection: "idle",

@@ -146,7 +146,25 @@ function bundleTranslations(): Plugin {
   };
 }
 
+/**
+ * The app's own version and repository, surfaced in the UI.
+ *
+ * Read here and injected with `define`, so the bundle carries a string literal rather
+ * than importing `package.json` at runtime. That keeps the manifest out of the browser
+ * and keeps the displayed version identical to the one `release.yml` checks against the
+ * git tag — the two cannot disagree.
+ */
+const manifest = JSON.parse(
+  readFileSync(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8"),
+) as { version: string; repository?: { url?: string } };
+
+const REPO_URL = "https://github.com/emdzej/ddtx";
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(manifest.version),
+    __REPO_URL__: JSON.stringify(manifest.repository?.url ?? REPO_URL),
+  },
   // GitHub Pages serves under /<repo>/. Everything the client fetches at runtime goes
   // through `import.meta.env.BASE_URL`, which Vite derives from this.
   base: process.env.BASE_PATH ?? "/",

@@ -66,7 +66,15 @@ describe.skipIf(!runnable)("the fault panel, in a browser", () => {
     });
 
     try {
-      await page.goto(url as string, { waitUntil: "networkidle" });
+      // Point the app at the dev server's tree before it boots. Since the installer
+      // landed, startup resolves whichever source was *saved* rather than assuming
+      // `/db` — so a fresh profile lands on the picker, not the catalogue.
+      await page.goto(url as string, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => {
+        localStorage.setItem("ddtx.dbSource", "remote");
+        localStorage.setItem("ddtx.dbRemoteUrl", "/db");
+      });
+      await page.reload({ waitUntil: "networkidle" });
 
       // A UDS ECU: fifteen status fields per record, which is the case the summary
       // line exists for.

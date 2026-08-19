@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "description": "Browser-based Renault/Dacia/Nissan ECU diagnostics \u2014 a TypeScript port of DDT4All",
   "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emdzej/ddtx"
+  },
   "type": "module",
   "packageManager": "pnpm@10.33.1",
   "scripts": {

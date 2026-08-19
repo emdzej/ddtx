@@ -13,11 +13,13 @@
   import Contents from "./components/Contents.svelte";
   import DatabasePicker from "./components/DatabasePicker.svelte";
   import Plugins from "./components/Plugins.svelte";
+  import Popover from "./components/Popover.svelte";
   import Settings from "./components/Settings.svelte";
   import Trace from "./components/Trace.svelte";
   import {
     loadPlugins,
     setPluginsOpen,
+    VIEW_DEFAULTS,
     setSettingsOpen,
     app,
     benchLink,
@@ -58,82 +60,158 @@
 
 <div class="app">
   <div class="strip" class:live role="status">
-    <span class="badge">{live ? "Live" : "Demo"}</span>
-    <span class="claim">
-      {#if live}
-        {app.connectionMessage}{app.attachment === null ? "" : ` · ${app.attachment}`}
-      {:else if app.connection === "connecting"}
-        {app.connectionMessage}
-      {:else if app.connection === "error"}
-        {app.connectionMessage}
-      {:else}
-        Values are generated from the database. No vehicle is connected.
-      {/if}
-    </span>
+    <!--
+      Wordmark, version, repository — the arrangement inpax uses, and the version is a
+      build-time literal from package.json rather than a runtime read, so it cannot
+      disagree with the tag `release.yml` checks.
+    -->
+    <span class="wordmark">DDT<span class="accent">X</span></span>
 
-    {#if !live}
-    <label class="control">
-      <span class="eyebrow">Fill</span>
-      <select
-        bind:value={app.fill}
-        onchange={() => void reconfigureDemo()}
-        title={FILL_HELP[app.fill]}
-      >
-        <option value="canned">Stored replies only</option>
-        <option value="pad">Stored, padded</option>
-        <option value="synthetic">All generated</option>
-      </select>
-    </label>
+    <a
+      class="version"
+      href={`${__REPO_URL__}/releases/tag/v${__APP_VERSION__}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Release notes for this version"
+    >
+      {__APP_VERSION__}
+    </a>
 
-    <label class="control check">
-      <input type="checkbox" bind:checked={app.drift} onchange={() => void reconfigureDemo()} />
-      <span>Vary values</span>
-    </label>
+    <a
+      class="repo"
+      href={__REPO_URL__}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="ddtx on GitHub"
+      aria-label="ddtx on GitHub"
+    >
+      <!-- GitHub's own mark, inlined so it takes `currentColor` and needs no fetch. -->
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+        <path
+          d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+        />
+      </svg>
+    </a>
+
+    <span class="rule" aria-hidden="true"></span>
+
+    {#if live}
+      <span class="badge">Live</span>
     {:else}
-      <!-- Writing is off by default and never remembered; see docs/plan.md §6.3. -->
+      <!--
+        The badge doubles as the trigger for what "demo" means: which replies are used
+        and whether they move. Those two controls define the mode, so they belong on the
+        thing that names it — and they were 242px of a strip that had run out of room.
+      -->
+      <Popover
+        label="Demo"
+        variant="badge"
+        title="How demo values are produced"
+        marked={app.fill !== VIEW_DEFAULTS.fill || app.drift !== VIEW_DEFAULTS.drift}
+      >
+        <label class="field">
+          <span class="eyebrow">Fill</span>
+          <select
+            bind:value={app.fill}
+            onchange={() => void reconfigureDemo()}
+            title={FILL_HELP[app.fill]}
+          >
+            <option value="canned">Stored replies only</option>
+            <option value="pad">Stored, padded</option>
+            <option value="synthetic">All generated</option>
+          </select>
+        </label>
+        <p class="note">{FILL_HELP[app.fill]}</p>
+
+        <label class="field check">
+          <input type="checkbox" bind:checked={app.drift} onchange={() => void reconfigureDemo()} />
+          <span>Vary values between reads</span>
+        </label>
+      </Popover>
+    {/if}
+
+    <!--
+      No standing "no vehicle is connected" text. The Connect button says that already —
+      it reads "Connect vehicle" when there is none, "Connecting…" mid-attempt, and
+      "Disconnect" once there is one — so a sentence repeating it was 300–600px of the
+      strip spent on something the reader can already see.
+
+      Two things the buttons cannot say keep a slot: a failure, which must not be
+      swallowed, and what the adapter is actually attached to, which is the one fact a
+      connected user wants and no button conveys.
+    -->
+    {#if app.connection === "error"}
+      <span class="claim bad">{app.connectionMessage}</span>
+    {:else if live && app.attachment !== null}
+      <span class="claim">{app.attachment}</span>
+    {/if}
+
+    <div class="spacer"></div>
+
+    {#if live}
+      <!--
+        Stays inline rather than going in a panel. It is the one control whose *state*
+        matters more than its convenience: whether writing is armed should be readable
+        without opening anything. Off by default and never remembered — docs/plan.md §6.3.
+      -->
       <label class="control check danger" title="Allow buttons to send to the vehicle">
         <input type="checkbox" bind:checked={app.writesEnabled} />
         <span>Allow writing</span>
       </label>
     {/if}
 
-    <label class="control check">
-      <input type="checkbox" bind:checked={app.inspect} />
-      <span>Inspect layout</span>
-    </label>
-
-    <label class="control">
-      <span class="eyebrow">Language</span>
-      <select
-        value={app.locale}
-        onchange={(event) => void setLocale(event.currentTarget.value)}
-        title="Original shows the database exactly as authored — mostly French, but a third of it is already English"
-      >
-        <option value="fr">Original — as authored</option>
-        <option value="en">English</option>
-      </select>
-    </label>
-
-    {#if app.locale !== "fr"}
-      <label class="control check">
-        <input type="checkbox" bind:checked={app.showUntranslated} />
-        <span>Mark gaps</span>
+    <!--
+      Language, zoom and the layout overlay: set once, changed rarely, and together they
+      were 471px of permanent strip.
+    -->
+    <Popover
+      label="View"
+      title="Language, zoom, and layout inspection"
+      marked={app.locale !== VIEW_DEFAULTS.locale ||
+        app.zoom !== VIEW_DEFAULTS.zoom ||
+        app.inspect !== VIEW_DEFAULTS.inspect ||
+        app.showUntranslated !== VIEW_DEFAULTS.showUntranslated}
+    >
+      <label class="field">
+        <span class="eyebrow">Language</span>
+        <select
+          value={app.locale}
+          onchange={(event) => void setLocale(event.currentTarget.value)}
+          title="Original shows the database exactly as authored — mostly French, but a third of it is already English"
+        >
+          <option value="fr">Original — as authored</option>
+          <option value="en">English</option>
+        </select>
       </label>
-    {/if}
 
-    <label class="control">
-      <span class="eyebrow">Zoom</span>
-      <select bind:value={app.zoom}>
-        <option value={"fit"}>Fit width</option>
-        <option value={200}>200%</option>
-        <option value={150}>150%</option>
-        <option value={100}>100% — native</option>
-        <option value={75}>75%</option>
-        <option value={50}>50%</option>
-      </select>
-    </label>
+      {#if app.locale !== "fr"}
+        <label class="field check">
+          <input type="checkbox" bind:checked={app.showUntranslated} />
+          <span>Mark untranslated gaps</span>
+        </label>
+      {/if}
 
-    <div class="spacer"></div>
+      <label class="field">
+        <span class="eyebrow">Zoom</span>
+        <select bind:value={app.zoom}>
+          <option value={"fit"}>Fit width</option>
+          <option value={200}>200%</option>
+          <option value={150}>150%</option>
+          <option value={100}>100% — native</option>
+          <option value={75}>75%</option>
+          <option value={50}>50%</option>
+        </select>
+      </label>
+
+      <label class="field check">
+        <input type="checkbox" bind:checked={app.inspect} />
+        <span>Inspect layout</span>
+      </label>
+      <p class="note">
+        Outlines every widget and its caption, so a screen's geometry can be read
+        directly. Works on live data too.
+      </p>
+    </Popover>
 
     <label class="control check">
       <input
@@ -155,7 +233,9 @@
         >
           {app.benching ? "Measuring…" : "Measure link"}
         </button>
-        <button class="link-button" onclick={() => void disconnect()}>Disconnect</button>
+        <button class="link-button live-link" onclick={() => void disconnect()}>
+          Disconnect
+        </button>
       {:else}
         <button
           class="link-button"
@@ -327,16 +407,65 @@
 
   /* Red Marianne only when a vehicle is really attached — the one mode change
      that must be impossible to miss. */
-  .strip.live {
-    background: var(--red);
-  }
-
   .strip.live .claim {
     color: #ffd9d9;
   }
 
-  .strip.live .control .eyebrow {
-    color: #ffc4c4;
+  /* A connection failure. White on the blue strip, because the red used elsewhere is
+     invisible against it. */
+  .claim.bad {
+    color: #fff;
+    font-weight: 600;
+    padding-left: 7px;
+    border-left: 2px solid var(--red);
+  }
+
+
+  .wordmark {
+    flex-shrink: 0;
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+
+  /*
+   * Marianne red, lightened for this ground.
+   *
+   * `--red` itself is 2.99:1 on Blue France — legible as a block, muddy as a glyph. This
+   * tint is 6.1:1 and still unmistakably the same red. The strip no longer repaints
+   * itself when live, so one value serves both modes.
+   */
+  .wordmark .accent {
+    color: #ff8080;
+  }
+
+  .version {
+    flex-shrink: 0;
+    color: #9095cf;
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    text-decoration: none;
+  }
+
+  .version:hover,
+  .repo:hover {
+    color: #fff;
+  }
+
+  .repo {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: #9095cf;
+  }
+
+  /* Separates the brand from the controls without a heavy divider. */
+  .rule {
+    flex-shrink: 0;
+    width: 1px;
+    height: 15px;
+    background: rgba(255, 255, 255, 0.28);
   }
 
   .badge {
@@ -349,8 +478,17 @@
     text-transform: uppercase;
   }
 
+  /*
+   * The live signal.
+   *
+   * It used to be the whole strip turning red, which was loud enough to fight the rest
+   * of the UI and forced every other colour choice around it. A red plate on the badge
+   * and a red Disconnect button say the same thing in the two places the eye already
+   * checks — and white on Marianne red is 4.99:1, so the badge reads as a block.
+   */
   .strip.live .badge {
-    color: var(--red);
+    background: var(--red);
+    color: #fff;
   }
 
   /*
@@ -360,8 +498,9 @@
    * Clipping to one line keeps the connection state legible and the strip one row
    * tall at any width.
    */
+  /* Only rendered when there is a failure or a live attachment to name. */
   .claim {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -376,15 +515,19 @@
     white-space: nowrap;
   }
 
-  .control .eyebrow {
-    color: #9095cf;
-  }
 
   .control.check {
     gap: 4px;
     cursor: pointer;
   }
 
+  /*
+   * Selects on the blue strip: light on dark.
+   *
+   * A popover panel is a light card, so this rule would make its selects near-white on
+   * white — unreadable, and it was. The `.strip :global(.panel select)` rule below
+   * overrides it; the scoping class gives that the higher specificity.
+   */
   .strip select {
     background: rgba(255, 255, 255, 0.1);
     color: #eef1f7;
@@ -404,6 +547,7 @@
   }
 
   .link-button {
+    white-space: nowrap;
     padding: 3px 11px;
     background: rgba(255, 255, 255, 0.14);
     color: #fff;
@@ -420,6 +564,22 @@
     cursor: not-allowed;
   }
 
+  /*
+   * The second half of the live signal, in the place the strip's actions cluster. Filled
+   * rather than outlined, so "there is a vehicle attached" is legible from the shape
+   * alone without reading the word.
+   */
+  .live-link {
+    background: var(--red);
+    border-color: var(--red);
+    font-weight: 600;
+  }
+
+  .live-link:hover {
+    background: #f2323f;
+    border-color: #f2323f;
+  }
+
   /* Same treatment as the connection controls: this is a mode switch, not the
      primary action, and it must not read as disabled the way an unstyled button
      against the blue strip does. */
@@ -433,6 +593,61 @@
 
   .settings:hover {
     background: rgba(255, 255, 255, 0.24);
+  }
+
+  /*
+   * Fields inside a popover panel. `:global` because they are rendered into
+   * `Popover`'s slot, so Svelte's scoping attributes them to that component — the
+   * markup is here, the element is there.
+   */
+  .strip :global(.field) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 11.5px;
+    color: var(--ink);
+  }
+
+  .strip :global(.field + .field),
+  .strip :global(.note + .field) {
+    margin-top: 8px;
+  }
+
+  .strip :global(.field .eyebrow) {
+    color: var(--ink-soft);
+  }
+
+  /* Inside a panel the ground is white, so these are dark on light. */
+  .strip :global(.panel select) {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 168px;
+    padding: 2px 4px;
+    border: 1px solid var(--rule);
+    border-radius: 0;
+    background: var(--card);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 11.5px;
+  }
+
+  .strip :global(.panel input[type="checkbox"]) {
+    accent-color: var(--blue);
+  }
+
+  /* Checkbox rows read left-to-right; the select rows are label-then-value. */
+  .strip :global(.field.check) {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  /* One line explaining the setting above it, rather than a tooltip nobody hovers. */
+  .strip :global(.panel .note) {
+    margin: 5px 0 0;
+    font-size: 10.5px;
+    line-height: 1.4;
+    color: var(--ink-faint);
   }
 
   .unsupported {
@@ -493,6 +708,7 @@
   }
 
   .read {
+    white-space: nowrap;
     padding: 3px 11px;
     background: #fff;
     color: var(--blue);
