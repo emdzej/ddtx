@@ -49,7 +49,7 @@
   }
 </script>
 
-<section class="picker">
+<section class="install">
   <div class="sheet">
     <span class="eyebrow">Database</span>
     <h1>Point ddtx at the ECU definitions</h1>
@@ -163,7 +163,7 @@
 </section>
 
 <style>
-  .picker {
+  .install {
     display: grid;
     place-items: center;
     padding: 32px 20px;

@@ -362,10 +362,18 @@
     grid-row: 3;
   }
 
-  /* Takes the row `main` would have had. Without this the picker lands in the
-     auto-sized row and the tricolour footer gets pushed off-screen — the same
-     class of bug as the conditional notice row. */
-  :global(.picker) {
+  /*
+   * Takes the row `main` would have had. Without this the install screen lands in the
+   * auto-sized row and the tricolour footer gets pushed off-screen — the same class of
+   * bug as the conditional notice row.
+   *
+   * Named `.install`, not `.picker`, and that matters: `.picker` is also
+   * `VehiclePicker`'s root class, so this `:global` rule was reaching into the catalogue
+   * and pinning the vehicle dropdown to grid row 3 — which put it *below* the group and
+   * bus selects, in a grid whose DOM order had it first. A `:global` rule keyed on a
+   * generic class name is a trap; the name is specific now.
+   */
+  :global(.install) {
     grid-row: 3;
     min-height: 0;
   }

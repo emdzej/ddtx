@@ -50,10 +50,7 @@ function findChromium(): string | undefined {
 const executablePath = findChromium();
 const archive = zip === undefined ? undefined : resolve(zip);
 const runnable =
-  url !== undefined &&
-  executablePath !== undefined &&
-  archive !== undefined &&
-  existsSync(archive);
+  url !== undefined && executablePath !== undefined && archive !== undefined && existsSync(archive);
 
 describe.skipIf(!runnable)("installing the database in a browser", () => {
   it("imports, persists across a reload, and skips a repeat of the same archive", async () => {
@@ -80,14 +77,14 @@ describe.skipIf(!runnable)("installing the database in a browser", () => {
       await page.evaluate(() => localStorage.clear());
       await page.reload({ waitUntil: "networkidle" });
 
-      await page.waitForSelector("section.picker", { timeout: 20_000 });
+      await page.waitForSelector("section.install", { timeout: 20_000 });
       expect(await page.locator("main").count()).toBe(0);
 
       await page.setInputFiles("input[type=file]", archive as string);
 
       // 3,749 entries and 1.19 GB. Generous, because CI disks vary wildly.
       await page.waitForSelector("main", { timeout: 300_000 });
-      expect(await page.locator("section.picker").count()).toBe(0);
+      expect(await page.locator("section.install").count()).toBe(0);
 
       // The catalogue is the proof the tree is readable, not just present.
       const catalogue = await page.locator("aside, .catalogue").first().innerText();
@@ -97,7 +94,7 @@ describe.skipIf(!runnable)("installing the database in a browser", () => {
       await page.reload({ waitUntil: "networkidle" });
       await page.waitForSelector("main", { timeout: 60_000 });
       // No picker and no permission prompt: this is what OPFS buys over a folder.
-      expect(await page.locator("section.picker").count()).toBe(0);
+      expect(await page.locator("section.install").count()).toBe(0);
 
       // ── settings describes what is installed ────────────────────────────────
       await page.getByRole("button", { name: /^Database$/ }).click();
