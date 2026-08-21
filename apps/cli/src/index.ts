@@ -9,7 +9,7 @@
  * without hardware.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   ElmDriver,
@@ -35,6 +35,7 @@ import {
 } from "@ddtx/session";
 import { listPorts, looksLikeAdapter, NodeSerialTransport } from "./nodeSerial.js";
 import { formatStats, latencyFloorHint, measure, STATS_HEADER } from "./bench.js";
+import { runCheckup } from "./checkup.js";
 
 /**
  * The multi-frame request `bench` uses: 11 bytes, so two frames out.
@@ -69,6 +70,13 @@ const USAGE = `ddtx — ELM327 diagnostics from the terminal
   ddtx dtc     --port <path> --ecu <slug> [--clear] [--tree <dir>]
       Read stored trouble codes. --clear erases them, which is irreversible and
       asks first.
+
+  ddtx checkup --port <path> [--vehicle <code>] [--bus can|kline|both]
+               [--samples <n>] [--tree <dir>] [--json <file>]
+      Everything worth measuring on a vehicle, in one **read-only** pass: adapter,
+      link timing, a sweep for fitted ECUs, then per module its identity, real
+      response timing, whether long replies survive flow control, and its stored
+      faults. Writes nothing — no clears, no actuations. Start here on a car.
 
   ddtx screens --ecu <slug> [--tree <dir>]
       List an ECU's screens. Needs no adapter.
@@ -326,6 +334,73 @@ async function cmdBench(args: Args): Promise<void> {
       );
     }
     process.stdout.write(`\nAdapter error counts: ${JSON.stringify(driver.errors)}\n`);
+  } finally {
+    await transport.close();
+  }
+}
+
+/**
+ * The read-only battery, for a first session on a vehicle.
+ *
+ * Composed from `scanAll`/`scanCan`/`scanKline` and the session helpers rather than
+ * reimplementing any of it, so what it measures is exactly what the app does.
+ */
+async function cmdCheckup(args: Args): Promise<void> {
+  const db = await EcuDatabase.open(fileSource(args.flags.get("tree") ?? "data/tree"));
+  const bus = args.flags.get("bus") ?? "both";
+  const sweep = bus === "can" ? scanCan : bus === "kline" ? scanKline : scanAll;
+  const samples = Number.parseInt(args.flags.get("samples") ?? "12", 10);
+
+  const transport = makeTransport(args);
+  const driver = makeDriver(transport, args);
+  await transport.open();
+
+  try {
+    const report = await runCheckup(driver, db, sweep, {
+      ...(args.flags.get("vehicle") === undefined
+        ? {}
+        : { project: args.flags.get("vehicle") as string }),
+      bus: bus as "can" | "kline" | "both",
+      samples: Number.isFinite(samples) ? samples : 12,
+      log: (line) => process.stdout.write(`${line}\n`),
+    });
+
+    process.stdout.write(`\n${report.found.length} module(s) examined, nothing written.\n`);
+
+    const unrecognised = report.found.filter((f) => f.slug === undefined).length;
+    if (unrecognised > 0) {
+      process.stdout.write(
+        `${unrecognised} answered without a catalogue entry — worth reporting upstream.\n`,
+      );
+    }
+    const stalls = report.found.reduce((sum, f) => sum + (f.timing?.over50ms ?? 0), 0);
+    const frameErrors = report.found.reduce((sum, f) => sum + (f.frameErrors ?? 0), 0);
+    const multi = report.found.reduce((sum, f) => sum + (f.multiFrameReplies ?? 0), 0);
+    process.stdout.write(
+      `${multi} multi-frame repl${multi === 1 ? "y" : "ies"}, ` +
+        `${frameErrors} frame error(s), ${stalls} exchange(s) over 50 ms.\n`,
+    );
+    const anyCan = report.found.some((f) => f.bus.toLowerCase().startsWith("can"));
+    if (anyCan && multi > 0 && frameErrors === 0) {
+      // The question `cfc0` exists for: does the adapter's own flow control hold?
+      process.stdout.write(
+        "Multi-frame CAN replies arrived intact, so the adapter's own flow control " +
+          "(AT CFC1) held.\n",
+      );
+    } else if (!anyCan) {
+      // Said explicitly, because the first run of this printed the CFC1 conclusion on a
+      // purely K-line vehicle, where there is no flow control to hold.
+      process.stdout.write(
+        "K-line only: ISO-TP flow control was never exercised, so nothing here speaks " +
+          "to AT CFC1 or cfc0.\n",
+      );
+    }
+
+    const out = args.flags.get("json");
+    if (out !== undefined) {
+      writeFileSync(out, JSON.stringify(report, null, 2));
+      process.stdout.write(`\nwrote ${out}\n`);
+    }
   } finally {
     await transport.close();
   }
@@ -616,6 +691,9 @@ async function main(): Promise<void> {
       return;
     case "dtc":
       await cmdDtc(args);
+      return;
+    case "checkup":
+      await cmdCheckup(args);
       return;
     case "screens":
       await cmdScreens(args);
