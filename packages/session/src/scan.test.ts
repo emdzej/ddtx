@@ -615,3 +615,34 @@ describe("addressesToProbe and the project-code split", () => {
     expect(addressesToProbe(index, "kline", "X70")).toEqual(["01", "0E"]);
   });
 });
+
+describe("supplier codes with unprintable bytes", () => {
+  /**
+   * The exact `2180` reply from a UCH on a real Master II, at address 26.
+   *
+   * Its supplier field is `00 32 31`, and the catalogue entry for this module records
+   * the supplier as `?21` — so the database renders the unprintable byte as a question
+   * mark, and reading it any other way cannot match.
+   */
+  const REAL_UCH = "61 80 82 00 58 46 63 10 00 32 31 28 11 75 44 00 00 06 00 07 00 0D 0A 11 EF 10";
+
+  it("renders an unprintable supplier byte as the database's own placeholder", () => {
+    const identity = parseIdentityBlock(REAL_UCH);
+    // Previously "": the parse stopped at the leading 00 and the module went
+    // unidentified despite agreeing on every other field.
+    expect(identity?.supplier).toBe("?21");
+  });
+
+  it("still reads the other three fields from that reply", () => {
+    const identity = parseIdentityBlock(REAL_UCH);
+    expect(identity).toMatchObject({ diagversion: "16", soft: "0006", version: "0007" });
+  });
+
+  it("drops trailing FF padding rather than turning it into placeholders", () => {
+    // The other half of the trap: an ABS reports "376" followed by FF filler, and
+    // rendering the filler would give "376??" and break a match that works.
+    const padded =
+      "61 80 82 00 58 46 63 10 33 37 36 FF FF FF FF FF FF 41 47 FF 00 C3 0D 0A 11 EF 04";
+    expect(parseIdentityBlock(padded)?.supplier).toBe("376");
+  });
+});

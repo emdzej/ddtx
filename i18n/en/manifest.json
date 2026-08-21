@@ -2,15 +2,15 @@
  "format": 1,
  "locale": "en",
  "counts": {
-  "data": 324,
-  "request": 65,
+  "data": 375,
+  "request": 95,
   "screen": 152,
   "category": 25,
-  "device": 60,
-  "list": 260,
+  "device": 117,
+  "list": 291,
   "unit": 57,
   "comment": 40,
-  "label": 211,
+  "label": 239,
   "button": 228,
   "message": 17
  }

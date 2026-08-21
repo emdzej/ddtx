@@ -131,15 +131,38 @@ function slicePacked(spaced: string, from: number, to: number): string {
 }
 
 /** ASCII from a slice of a spaced reply. */
+/**
+ * Read a field as text, rendering bytes that are not printable ASCII as `?`.
+ *
+ * The `?` is not our invention — it is what the database already contains. A real UCH
+ * reports its supplier as the bytes `00 32 31`, and the catalogue entry for that module
+ * says `?21`: whatever exported these definitions wrote the unprintable byte as a
+ * question mark. So rendering it the same way makes the two sides meet, and the entry
+ * matches exactly.
+ *
+ * **A deliberate divergence.** The original breaks at the first `00` or `FF`, which for
+ * that UCH yields `""` — no supplier, no exact match, and the module reported as
+ * unrecognised. That is what ddtx did too until a real vehicle showed it: address 26
+ * agreed on diagnostic version and soft number and still failed to identify, purely on
+ * an empty supplier. The original has the same bug; being faithful to it here costs a
+ * correct identification.
+ *
+ * Trailing padding is still dropped. `FF` filler after a three-character code has to
+ * stay invisible, or the ABS's `376` would become `376??` and stop matching — which is
+ * the same trap from the other side.
+ */
 function sliceAscii(spaced: string, from: number, to: number): string {
   const hex = slicePacked(spaced, from, to);
   let text = "";
   for (let i = 0; i + 1 < hex.length; i += 2) {
     const byte = Number.parseInt(hex.slice(i, i + 2), 16);
-    if (Number.isNaN(byte) || byte === 0xff || byte === 0x00) break;
-    text += String.fromCharCode(byte);
+    if (Number.isNaN(byte)) break;
+    // Printable ASCII passes through; anything else becomes the placeholder the
+    // database itself uses.
+    text += byte >= 0x20 && byte <= 0x7e ? String.fromCharCode(byte) : "?";
   }
-  return text.trim();
+  // Only *trailing* placeholders are padding. A leading one is part of the code.
+  return text.replace(/\?+$/, "").trim();
 }
 
 /**
