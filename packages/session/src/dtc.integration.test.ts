@@ -72,7 +72,13 @@ describe.skipIf(!available)("fault reading across the real database", () => {
     expect(supported).toBe(1392);
     // Every record field the database uses across the whole corpus. A change that
     // starts dropping fields shows up here before anyone notices a blank row.
-    expect(fieldNames.size).toBe(115);
+    //
+    // 114, down from 115: `Specific Fault` and `Standard Fault` are defined over the
+    // identical bits in 153 ECUs, and `Type Of Fault` selects which enum decodes them,
+    // so only the selected one is reported now. Every ECU sampled here reads
+    // `Standard`, which drops `Specific Fault` from the set. This fence moving is the
+    // intended consequence of that change, not a regression — see selectFaultKind.
+    expect(fieldNames.size).toBe(114);
     // Record stride, in bytes. 4 dominates; 5 ECUs define none and get one record.
     expect(Object.fromEntries(strides)).toEqual({ 0: 5, 2: 2, 3: 333, 4: 1049, 5: 2, 6: 1 });
     // The simulated reply always declares three records and carries the bytes for
