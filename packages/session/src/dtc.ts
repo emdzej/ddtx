@@ -127,6 +127,37 @@ export function dtcClearRequestName(ecu: LoadedEcu): string | undefined {
 }
 
 /** Nothing usable came back — empty, an adapter complaint, or not hex at all. */
+/**
+ * Drop whichever of `Standard Fault` / `Specific Fault` does not apply.
+ *
+ * These two fields are defined over the **identical bits** — same `firstbyte`, same
+ * `bitoffset` — and differ only in which enum table decodes them. `Type Of Fault`
+ * chooses: `0` means read them as a standard fault, `1` as a specific one. So exactly
+ * one of the two is meaningful and the other is the same five bits looked up in the
+ * wrong table.
+ *
+ * Not a quirk of one module: **153 ECUs** define the pair this way, 153 of the 154 that
+ * define both. The original renders every receive field and so shows both, which is how
+ * a real glow-plug-relay fault on a Master II came out reading
+ * "Pression insuffisante grave" — serious insufficient pressure — beside the correct
+ * "diagnostic". Alarming, and untrue.
+ *
+ * Where the discriminator is missing or unreadable, both are kept: better two readings
+ * with one wrong than none, and there is nothing to choose with.
+ */
+function selectFaultKind(fields: readonly DtcField[]): DtcField[] {
+  const kind = fields.find((field) => field.name === "Type Of Fault");
+  if (kind === undefined) return [...fields];
+
+  // The raw bit, not the label — the label is enum text and a translation would break a
+  // comparison against it.
+  const raw = Number.parseInt(kind.hex, 16);
+  if (Number.isNaN(raw)) return [...fields];
+
+  const drop = raw === 0 ? "Specific Fault" : "Standard Fault";
+  return fields.filter((field) => field.name !== drop);
+}
+
 function isEmpty(response: string): boolean {
   const compact = response.replace(/\s+/g, "").toUpperCase();
   return (
@@ -310,7 +341,7 @@ export async function readDtcs(
     // A record that decoded nothing means the response ran out; stop rather than
     // emit empty records to reach the declared count.
     if (fields.length === 0) break;
-    records.push({ index: n, fields });
+    records.push({ index: n, fields: selectFaultKind(fields) });
 
     // Slide the window. With no stride there is only ever one record to read.
     if (stride <= 0) break;

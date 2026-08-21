@@ -364,3 +364,99 @@ describe("replies that are not hex", () => {
     expect(result.declared).toBe(0);
   });
 });
+
+describe("Standard Fault and Specific Fault share the same bits", () => {
+  /**
+   * 153 ECUs define both fields over the identical `firstbyte`/`bitoffset`, differing
+   * only in which enum table decodes them, with `Type Of Fault` choosing. Reporting
+   * both means reporting the same five bits looked up in the wrong table alongside the
+   * right one — which on a real Master II turned a glow-plug-relay fault into
+   * "Pression insuffisante grave".
+   */
+  function faultKindEcu(): LoadedEcu {
+    const data: Record<string, DataDef> = {
+      NDTC: { bitscount: 8 } as DataDef,
+      FirstDTC: { bitscount: 16 } as DataDef,
+      "Type Of Fault": { bitscount: 1, lists: { "0": "Standard", "1": "Specific" } } as DataDef,
+      // The real ECU's tables at the value byte 5 actually decodes to, taken from the
+      // database rather than assumed: 15 in one table, 15 in the other.
+      "Standard Fault": { bitscount: 5, lists: { "15": "diagnostic" } } as DataDef,
+      "Specific Fault": {
+        bitscount: 5,
+        lists: { "15": "Pression insuffisante grave" },
+      } as DataDef,
+    };
+    const request: RequestDef = {
+      name: "ReadDTC",
+      deny_sds: [],
+      sentbytes: "17FF00",
+      minbytes: 2,
+      shiftbytescount: 3,
+      receivebyte_dataitems: {
+        NDTC: { firstbyte: 2 },
+        FirstDTC: { firstbyte: 3 },
+        "Type Of Fault": { firstbyte: 5 },
+        // Identical placement, as the database has it.
+        "Standard Fault": { firstbyte: 5, bitoffset: 3 },
+        "Specific Fault": { firstbyte: 5, bitoffset: 3 },
+      },
+    };
+    const resolved = resolveDataDictionary(data);
+    return {
+      slug: "edc16",
+      def: {
+        ecuname: "EDC16",
+        obd: { protocol: "KWP2000", funcaddr: "7A", funcname: "Injection" } as ObdConfig,
+        autoidents: [],
+        requests: [request],
+        data,
+        devices: [],
+      },
+      endianness: "Big",
+      data: resolved,
+      requests: new Map([
+        [request.name, { def: request, endianness: "Big" as const, data: resolved }],
+      ]),
+    };
+  }
+
+  /** The exact reply from the engine ECU of a real Master II. */
+  const REAL = "57 03 03 80 6F 05 71 66 25 02 66";
+
+  it("reports only the field the discriminator selects", async () => {
+    const { driver } = harness((frame) =>
+      frame.replace(/\s+/g, "") === "17FF00" ? REAL : "NO DATA",
+    );
+
+    const result = await readDtcs(driver, faultKindEcu());
+
+    expect(result.records).toHaveLength(3);
+    const names = result.records[0]?.fields.map((f) => f.name) ?? [];
+    // Byte 5 is 0x6F, so Type Of Fault reads Standard and the specific table is wrong.
+    expect(names).toContain("Standard Fault");
+    expect(names).not.toContain("Specific Fault");
+  });
+
+  it("keeps the right label and drops the wrong one", async () => {
+    const { driver } = harness((frame) =>
+      frame.replace(/\s+/g, "") === "17FF00" ? REAL : "NO DATA",
+    );
+
+    const result = await readDtcs(driver, faultKindEcu());
+    const rendered = result.records[0]?.fields.map((f) => f.value) ?? [];
+
+    expect(rendered).toContain("diagnostic");
+    expect(rendered).not.toContain("Pression insuffisante grave");
+  });
+
+  it("slides the window correctly across all three real records", async () => {
+    const { driver } = harness((frame) =>
+      frame.replace(/\s+/g, "") === "17FF00" ? REAL : "NO DATA",
+    );
+
+    const result = await readDtcs(driver, faultKindEcu());
+    const codes = result.records.map((r) => r.fields.find((f) => f.name === "FirstDTC")?.hex);
+    // 0380, 0571, 2502 — stride 3 from byte 3, as the car reported them.
+    expect(codes).toEqual(["0380", "0571", "2502"]);
+  });
+});
