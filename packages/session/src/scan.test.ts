@@ -569,3 +569,49 @@ describe("scanAll", () => {
     expect(report.results.every((r) => r.bus === "can")).toBe(true);
   });
 });
+
+describe("addressesToProbe and the project-code split", () => {
+  /** Two codes for one model, with an address only the later one carries. */
+  const index = {
+    format: 1 as const,
+    ecus: {
+      abs: {
+        address: "01",
+        protocol: "KWP2000",
+        projects: ["x70", "x70Ph3"],
+        group: "",
+        ecuname: "ABS",
+      },
+      parking: {
+        address: "0E",
+        protocol: "KWP2000",
+        projects: ["x70Ph3"],
+        group: "",
+        ecuname: "Parking",
+      },
+      other: { address: "44", protocol: "KWP2000", projects: ["x83"], group: "", ecuname: "Other" },
+    },
+    groups: [],
+    projects: ["x70", "x70Ph3", "x83"],
+    protocols: ["KWP2000"],
+  } as unknown as Parameters<typeof addressesToProbe>[0];
+
+  it("includes addresses that only a later variant of the same model carries", () => {
+    // The bug this fixes was found on a real car: asking for `x70` on a Master II
+    // probed 7 addresses and silently skipped 3 that only `x70Ph3` declares — the
+    // parking aid, the SVT and the tacho. A module the vehicle has, never asked.
+    expect(addressesToProbe(index, "kline", "x70")).toEqual(["01", "0E"]);
+  });
+
+  it("still excludes other models", () => {
+    expect(addressesToProbe(index, "kline", "x70")).not.toContain("44");
+  });
+
+  it("matches when given the fuller code too", () => {
+    expect(addressesToProbe(index, "kline", "x70Ph3")).toEqual(["01", "0E"]);
+  });
+
+  it("is case-insensitive, as the index is inconsistent about it", () => {
+    expect(addressesToProbe(index, "kline", "X70")).toEqual(["01", "0E"]);
+  });
+});

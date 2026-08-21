@@ -260,6 +260,23 @@ export async function identifyByLocalId(driver: ElmDriver): Promise<ReportedIden
  * The bus split matters more than it looks: Master II is 15 K-line ECUs to 2 on
  * CAN, so a CAN-only sweep would miss almost the whole vehicle.
  */
+/**
+ * Does a project code belong to the vehicle asked for?
+ *
+ * Prefix, not equality, and that is a real fix rather than laxity. A single model is
+ * split across several codes — Master II is `x70` **and** `x70Ph3`, and the Ph3 entries
+ * carry three K-line addresses the base code does not: the parking aid at `0E`, the SVT
+ * at `3F`, the tacho at `EE`. Asking for `x70` on an actual Master II therefore probed
+ * 7 addresses and silently skipped 3, which is the wrong kind of silence — a module the
+ * car has, never asked.
+ *
+ * Over-probing costs time, never damage: an address with nothing behind it answers
+ * nothing, and the sweep reports only what replied. Under-probing loses a module.
+ */
+function matchesProject(code: string, wanted: string): boolean {
+  return code.trim().toUpperCase().startsWith(wanted);
+}
+
 export function addressesToProbe(index: DbTreeIndex, bus: ScanBus, project?: string): string[] {
   const wanted = project?.trim().toUpperCase();
   const addresses = new Set<string>();
@@ -267,10 +284,7 @@ export function addressesToProbe(index: DbTreeIndex, bus: ScanBus, project?: str
 
   for (const entry of Object.values(index.ecus)) {
     if (!wantedProtocols.has(entry.protocol.toUpperCase())) continue;
-    if (
-      wanted !== undefined &&
-      !entry.projects.some((code) => code.trim().toUpperCase() === wanted)
-    ) {
+    if (wanted !== undefined && !entry.projects.some((code) => matchesProject(code, wanted))) {
       continue;
     }
     const address = entry.address.trim().toUpperCase();
