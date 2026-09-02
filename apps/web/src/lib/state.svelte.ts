@@ -55,7 +55,7 @@ import {
   type ScreenSnapshot,
   testerPresentFrame,
 } from "@ddtx/screens";
-import type { LoadedEcu } from "@ddtx/db";
+import type { DbSource, LoadedEcu } from "@ddtx/db";
 import {
   grantFolder,
   importArchive,
@@ -65,10 +65,13 @@ import {
   resolveSavedSource,
   storageUsage,
   useRemote,
+  verifySource,
+  ArchiveRejected,
   type ImportProgress,
   type ResolvedSource,
 } from "./dbInstall.js";
 import type { TreeManifest } from "./dbImport.worker.js";
+import type { StructureFinding } from "@ddtx/dbimport";
 import { clearFolderHandle, saveRemoteUrl, type DbSourceKind } from "./installStorage.js";
 import { discoverPlugins, hostFor, loadPluginModule } from "./plugins.js";
 import type { PluginManifest } from "@ddtx/plugin-sdk";
@@ -273,6 +276,19 @@ interface AppState {
    * `dtcNotice` — so sharing one field means the outcome of the irreversible action
    * is wiped by the step that verifies it, leaving no trace that anything happened.
    */
+  /**
+   * Structural complaints about the archive or folder the user chose.
+   *
+   * Separate from `importError`: these are specific, plural and actionable — "no
+   * db.json in the archive" says which file was picked wrongly, where a single error
+   * string does not.
+   */
+  dbFindings: StructureFinding[];
+  /** True while the on-demand check runs. */
+  verifying: boolean;
+  /** Set when a check found nothing wrong — silence would read as "did nothing". */
+  dbVerified: string | null;
+
   dtcClearNotice: string | null;
 }
 
@@ -389,6 +405,9 @@ export const app = $state<AppState>({
   dtcRequest: null,
   dtcReading: false,
   dtcClearing: false,
+  dbFindings: [],
+  verifying: false,
+  dbVerified: null,
   dtcNotice: null,
   dtcClearNotice: null,
 });
@@ -566,9 +585,19 @@ export async function openDatabase(): Promise<void> {
 /** The folder whose permission lapsed, held until a click can re-request it. */
 let pendingFolder: FileSystemDirectoryHandle | null = null;
 
+/**
+ * The source behind the open database.
+ *
+ * Kept because `EcuDatabase` does not expose the source it was opened with, and the
+ * on-demand check needs to read raw paths from it — `index.json`, a sample of ECU
+ * files — rather than go through the loader.
+ */
+let dbSourceRef: DbSource | null = null;
+
 /** Open a resolved source and populate the index facets from it. */
 async function useSource(resolved: ResolvedSource): Promise<void> {
   database = await EcuDatabase.open(resolved.source);
+  dbSourceRef = resolved.source;
   app.dbSource = { kind: resolved.kind, label: resolved.label };
   app.folderNeedsPermission = false;
   app.ecuCount = database.size;
@@ -582,6 +611,7 @@ async function useSource(resolved: ResolvedSource): Promise<void> {
 /** Unpack `ecu.zip` into the browser's own storage, then open it. */
 export async function installArchive(file: File): Promise<void> {
   app.importError = null;
+  app.dbFindings = [];
   // Starts as "hashing", not "unpacking": the archive is checked against what is
   // already installed first, and claiming to unpack during that is a label the user
   // can catch out when the same archive is then skipped instantly.
@@ -591,11 +621,21 @@ export async function installArchive(file: File): Promise<void> {
       app.importProgress = progress;
     });
     app.installed = outcome.manifest;
+    // Imported, but not silently: an ECU with no layout should be explained now rather
+    // than discovered as a screen that will not open.
+    if (outcome.warnings !== undefined) app.dbFindings = outcome.warnings;
     const resolved = await resolveSavedSource();
     if (resolved !== null && "ok" in resolved) await useSource(resolved.ok);
     else throw new Error("the archive unpacked but the tree could not be opened");
   } catch (cause) {
-    app.importError = cause instanceof Error ? cause.message : String(cause);
+    if (cause instanceof ArchiveRejected) {
+      // Refused before anything was written, so say so — the installed database is
+      // exactly as it was.
+      app.dbFindings = cause.findings;
+      app.importError = "That archive was not used, and nothing already installed was changed.";
+    } else {
+      app.importError = cause instanceof Error ? cause.message : String(cause);
+    }
   } finally {
     app.importProgress = null;
   }
@@ -604,14 +644,45 @@ export async function installArchive(file: File): Promise<void> {
 /** Point at an already-split tree in a folder on disk. Must be called from a click. */
 export async function chooseFolder(): Promise<void> {
   app.importError = null;
-  const resolved = await pickFolder();
-  if (resolved === null) return;
+  app.dbFindings = [];
   try {
+    const resolved = await pickFolder();
+    if (resolved === null) return;
     await useSource(resolved);
   } catch (cause) {
-    app.importError =
-      `That folder does not look like a split tree — ` +
-      `${cause instanceof Error ? cause.message : String(cause)}`;
+    if (cause instanceof ArchiveRejected) {
+      // `pickFolder` verifies before remembering, so a wrong folder never becomes the
+      // saved source and the findings say which folder to pick instead.
+      app.dbFindings = cause.findings;
+      app.importError = "That folder was not used.";
+    } else {
+      app.importError = cause instanceof Error ? cause.message : String(cause);
+    }
+  }
+}
+
+/**
+ * Check the installed database on demand.
+ *
+ * The structural check runs automatically on import and on picking a folder; this is
+ * the same check against whatever is currently in use, for when something looks wrong
+ * later.
+ */
+export async function verifyDatabase(): Promise<void> {
+  if (dbSourceRef === null) return;
+  app.dbFindings = [];
+  app.verifying = true;
+  try {
+    const report = await verifySource(dbSourceRef);
+    app.dbFindings = report.findings;
+    app.dbVerified = report.ok
+      ? `Checked: index plus ${report.sampled?.checked ?? 0} sampled ECUs, ` +
+        `${report.indexed ?? 0} declared. No problems found.`
+      : null;
+  } catch (cause) {
+    app.importError = cause instanceof Error ? cause.message : String(cause);
+  } finally {
+    app.verifying = false;
   }
 }
 
@@ -770,6 +841,7 @@ export async function forgetDatabase(): Promise<void> {
   await removeInstalledTree();
   await clearFolderHandle();
   database = null;
+  dbSourceRef = null;
   ecu = null;
   layout = null;
   runtime = null;

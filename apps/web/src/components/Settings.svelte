@@ -16,6 +16,7 @@
     forgetDatabase,
     installArchive,
     setSettingsOpen,
+    verifyDatabase,
   } from "../lib/state.svelte.js";
   import { DEV_DB_URL } from "../lib/dbInstall.js";
   import { folderPickerSupported } from "../lib/installStorage.js";
@@ -121,6 +122,21 @@
       <p class="notice">{app.importError}</p>
     {/if}
 
+    {#if app.dbVerified !== null}
+      <p class="hint ok">{app.dbVerified}</p>
+    {/if}
+
+    {#if app.dbFindings.length > 0}
+      <ul class="findings">
+        {#each app.dbFindings as finding, i (i)}
+          <li class:warn={finding.severity === "warning"}>
+            <span class="tag">{finding.severity === "warning" ? "check" : "problem"}</span>
+            {finding.message}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+
     <div class="actions">
       <div class="row">
         <div>
@@ -132,6 +148,19 @@
         </div>
         <button onclick={() => fileInput?.click()} disabled={importing}>Choose ecu.zip</button>
         <input bind:this={fileInput} type="file" accept=".zip,application/zip" onchange={onPick} hidden />
+      </div>
+
+      <div class="row">
+        <div>
+          <h2>Check the installed database</h2>
+          <p>
+            Reads the index and samples a dozen ECUs, reporting anything missing or
+            malformed. The same check runs when a database is installed.
+          </p>
+        </div>
+        <button onclick={() => void verifyDatabase()} disabled={app.verifying || importing}>
+          {app.verifying ? "Checking…" : "Verify"}
+        </button>
       </div>
 
       <div class="row">
@@ -347,6 +376,49 @@
     padding: 0 16px 10px;
     font-size: 11.5px;
     color: var(--ink-soft);
+  }
+
+  .hint.ok {
+    color: var(--blue);
+  }
+
+  .findings {
+    list-style: none;
+    margin: 0 16px 12px;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .findings li {
+    padding: 5px 0 5px 8px;
+    border-left: 2px solid var(--red);
+  }
+
+  .findings li + li {
+    margin-top: 4px;
+  }
+
+  .findings li.warn {
+    border-left-color: var(--ink-faint);
+    color: var(--ink-soft);
+  }
+
+  .findings .tag {
+    display: inline-block;
+    margin-right: 5px;
+    padding: 0 4px;
+    background: var(--red);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    vertical-align: 1px;
+  }
+
+  .findings li.warn .tag {
+    background: var(--ink-faint);
   }
 
   .notice {

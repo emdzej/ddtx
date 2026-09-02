@@ -13,6 +13,7 @@
  * See docs/database-install.md.
  */
 
+import { inspectTree, type StructureFinding, type TreeReport } from "@ddtx/dbimport";
 import {
   DirectoryDbSource,
   HttpDbSource,
@@ -122,6 +123,18 @@ export async function grantFolder(
   return folderSource(handle);
 }
 
+/**
+ * Check a source really holds a split tree.
+ *
+ * Run before adopting a folder and available on demand from settings. Samples the index
+ * plus a dozen ECUs rather than all 1,580: a folder picker hands back whatever was
+ * clicked, and "Downloads" should be refused in a moment with a reason rather than by
+ * failing on the first ECU opened half an hour later.
+ */
+export function verifySource(source: DbSource): Promise<TreeReport> {
+  return inspectTree((path) => source.read(path));
+}
+
 /** Ask for a folder holding an already-split tree. Must be called from a click. */
 export async function pickFolder(): Promise<ResolvedSource | null> {
   const picker = (
@@ -140,9 +153,14 @@ export async function pickFolder(): Promise<ResolvedSource | null> {
     return null; // The user cancelled.
   }
 
+  // Verified before it is remembered, so a wrong folder never becomes the saved source.
+  const candidate = folderSource(handle);
+  const report = await verifySource(candidate.source);
+  if (!report.ok) throw new ArchiveRejected(report.findings);
+
   await saveFolderHandle(handle);
   saveSourceKind("folder");
-  return folderSource(handle);
+  return candidate;
 }
 
 export function useRemote(url: string): ResolvedSource {
@@ -169,6 +187,16 @@ export interface ImportProgress {
 export interface ImportOutcome {
   manifest: TreeManifest;
   elapsedMs: number;
+  /** Survivable structural complaints, if any. */
+  warnings?: StructureFinding[];
+}
+
+/** Thrown when an archive is not a usable database. Nothing was written. */
+export class ArchiveRejected extends Error {
+  constructor(public readonly findings: StructureFinding[]) {
+    super(findings.map((f) => f.message).join(" "));
+    this.name = "ArchiveRejected";
+  }
 }
 
 /** SHA-256 of the archive, so a re-import of the same snapshot can be recognised. */
@@ -223,9 +251,15 @@ export async function importArchive(
   const worker = new ImportWorker();
   try {
     const outcome = await new Promise<ImportOutcome>((resolve, reject) => {
+      let warnings: StructureFinding[] = [];
       worker.onmessage = (event: MessageEvent<ImportMessage>) => {
         const message = event.data;
-        if (message.kind === "progress") {
+        if (message.kind === "rejected") {
+          // Refused before anything was written, so whatever was installed is intact.
+          reject(new ArchiveRejected(message.findings));
+        } else if (message.kind === "warnings") {
+          warnings = message.findings;
+        } else if (message.kind === "progress") {
           onProgress?.({
             phase: "unpacking",
             done: message.done,
@@ -233,7 +267,11 @@ export async function importArchive(
             bytesOut: message.bytesOut,
           });
         } else if (message.kind === "done") {
-          resolve({ manifest: message.manifest, elapsedMs: message.elapsedMs });
+          resolve({
+            manifest: message.manifest,
+            elapsedMs: message.elapsedMs,
+            ...(warnings.length === 0 ? {} : { warnings }),
+          });
         } else if (message.kind === "error") {
           reject(new Error(message.message));
         }

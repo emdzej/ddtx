@@ -127,6 +127,22 @@
       <p class="notice">{app.importError}</p>
     {/if}
 
+    <!--
+      Why it was refused, itemised. "No db.json in the archive" tells you which file you
+      picked wrongly; a single "import failed" does not, and this is the moment the
+      answer is useful.
+    -->
+    {#if app.dbFindings.length > 0}
+      <ul class="findings">
+        {#each app.dbFindings as finding, i (i)}
+          <li class:warn={finding.severity === "warning"}>
+            <span class="tag">{finding.severity === "warning" ? "check" : "problem"}</span>
+            {finding.message}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+
     <button class="disclose" onclick={() => (showAdvanced = !showAdvanced)}>
       {showAdvanced ? "Hide" : "I already have a split tree"}
     </button>
@@ -308,6 +324,46 @@
     font-size: 12px;
     line-height: 1.45;
     color: var(--ink);
+  }
+
+  .findings {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  .findings li {
+    padding: 6px 0 6px 8px;
+    border-left: 2px solid var(--red);
+  }
+
+  .findings li + li {
+    margin-top: 4px;
+  }
+
+  /* A warning did not stop the import; it explains something the user will notice. */
+  .findings li.warn {
+    border-left-color: var(--ink-faint);
+    color: var(--ink-soft);
+  }
+
+  .findings .tag {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 0 4px;
+    background: var(--red);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    vertical-align: 1px;
+  }
+
+  .findings li.warn .tag {
+    background: var(--ink-faint);
   }
 
   .disclose {

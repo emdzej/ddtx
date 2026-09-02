@@ -17,7 +17,12 @@
  * why this runs on any browser with OPFS rather than Chromium only.)
  */
 
-import { splitArchive, type SplitSink } from "@ddtx/dbimport";
+import {
+  inspectArchive,
+  splitArchive,
+  type SplitSink,
+  type StructureFinding,
+} from "@ddtx/dbimport";
 import { OPFS_TREE_DIR } from "@ddtx/db";
 
 export interface ImportRequest {
@@ -32,7 +37,11 @@ export type ImportMessage =
   | { kind: "progress"; done: number; total: number; bytesOut: number }
   | { kind: "log"; message: string }
   | { kind: "done"; manifest: TreeManifest; elapsedMs: number }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+  /** The archive is not usable. Nothing was touched. */
+  | { kind: "rejected"; findings: StructureFinding[] }
+  /** Structural warnings on an archive that is being imported anyway. */
+  | { kind: "warnings"; findings: StructureFinding[] };
 
 export interface TreeManifest {
   format: 1;
@@ -79,10 +88,25 @@ async function run(request: ImportRequest): Promise<void> {
     const started = performance.now();
     const bytes = new Uint8Array(request.zip);
 
+    // Check the archive **before** touching anything. The import clears the installed
+    // tree before it writes, so without this the sequence for a wrong file was: delete a
+    // working database, unpack whatever was in the zip, then fail at the end with
+    // "db.json not found". The check that mattered ran after the damage.
+    const report = inspectArchive(bytes);
+    if (!report.ok) {
+      post({ kind: "rejected", findings: report.findings });
+      return;
+    }
+    if (report.findings.length > 0) {
+      // Survivable, but the user should hear about it rather than wonder later why an
+      // ECU has no screens.
+      post({ kind: "warnings", findings: report.findings });
+    }
+
     const root = await navigator.storage.getDirectory();
     const ddtx = await root.getDirectoryHandle("ddtx", { create: true });
 
-    // Clear first, so a failure cannot leave an old tree mixed with a new one.
+    // Only now, with the archive known good, is it safe to drop the old tree.
     await removeIfPresent(ddtx, OPFS_TREE_DIR);
     const tree = await ddtx.getDirectoryHandle(OPFS_TREE_DIR, { create: true });
 
