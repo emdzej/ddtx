@@ -21,6 +21,7 @@
     setPluginsOpen,
     VIEW_DEFAULTS,
     setSettingsOpen,
+    setStageFull,
     app,
     benchLink,
     connect,
@@ -56,7 +57,48 @@
     pad: "Stored replies, extended so every field has something to decode.",
     synthetic: "All values generated. Useful for checking layout and text length.",
   };
+
+  /**
+   * The preference only takes effect while a screen is on show.
+   *
+   * Full screen hides the only two ways to choose an ECU or a screen, so honouring it
+   * with nothing open would strand the user on a notice telling them to pick something.
+   * Deselecting brings the panels straight back and leaves the preference set.
+   */
+  const stageFull = $derived(app.stageFull && app.screen !== null);
+
+  /**
+   * `F` toggles full screen, `Escape` leaves it.
+   *
+   * Typing wins over the shortcut — the strip and the panels are full of text and
+   * number fields, and `f` is a letter in `Diagnostic`. Escape is left to whatever
+   * dialog is open, since those own it while they are up.
+   */
+  function onKey(event: KeyboardEvent): void {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+    const target = event.target;
+    if (target instanceof HTMLElement) {
+      const tag = target.tagName;
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || target.isContentEditable) {
+        return;
+      }
+    }
+
+    if (event.key === "f" || event.key === "F") {
+      if (app.screen === null) return;
+      setStageFull(!stageFull);
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === "Escape" && stageFull && !app.settingsOpen && !app.pluginsOpen) {
+      setStageFull(false);
+    }
+  }
 </script>
+
+<svelte:window onkeydown={onKey} />
 
 <div class="app">
   <div class="strip" class:live role="status">
@@ -272,14 +314,32 @@
     <button class="read" onclick={() => void refresh()} disabled={app.screen === null || app.refreshing}>
       {app.refreshing ? "Reading…" : "Read now"}
     </button>
+
+    <!--
+      Screens are fixed-size canvases the database chose, and plenty are wider than what
+      is left after the two index columns. This drops both of them, which is 532px — the
+      difference between scrolling a screen sideways and seeing it whole.
+    -->
+    <button
+      class="expand"
+      onclick={() => setStageFull(!stageFull)}
+      disabled={app.screen === null}
+      title={stageFull ? "Dock the screen (Esc)" : "Give the screen the whole window (F)"}
+      aria-pressed={stageFull}
+      aria-label={stageFull ? "Dock the screen" : "Full screen"}
+    >
+      {stageFull ? "⤡" : "⤢"}
+    </button>
   </div>
 
   {#if app.phase === "needs-database"}
     <DatabasePicker />
   {:else}
-  <main class:narrow={!app.catalogueOpen}>
-    <Catalogue />
-    <Contents />
+  <main class:narrow={!app.catalogueOpen} class:full={stageFull}>
+    {#if !stageFull}
+      <Catalogue />
+      <Contents />
+    {/if}
 
     <div class="stage" class:trace-open={app.traceOpen}>
       {#if app.phase === "loading"}
@@ -726,6 +786,28 @@
     letter-spacing: 0.04em;
   }
 
+  /* Square, glyph-only and unlabelled: the strip is already at eleven controls and
+     this one is recognisable without a word. */
+  .expand {
+    padding: 3px 7px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.1;
+  }
+
+  .expand:hover:not(:disabled),
+  .expand[aria-pressed="true"] {
+    background: rgba(255, 255, 255, 0.28);
+  }
+
+  .expand:disabled {
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #8f93cc;
+    cursor: not-allowed;
+  }
+
   .read:disabled {
     background: rgba(255, 255, 255, 0.16);
     color: #8f93cc;
@@ -742,6 +824,13 @@
      and the address of what's selected. */
   main.narrow {
     grid-template-columns: 40px 244px minmax(0, 1fr);
+  }
+
+  /* Full screen keeps the strip: Read now, Keep reading and the connection state are
+     exactly what you reach for while a screen is on show. Everything below it goes. */
+  main.full,
+  main.narrow.full {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .stage {
@@ -796,6 +885,13 @@
     }
     .stage {
       grid-column: 1 / -1;
+    }
+    /* Stacking is what costs the canvas its height here, so full screen has more to
+       give back on a small viewport than on a large one. */
+    main.full,
+    main.narrow.full {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
     }
   }
 </style>

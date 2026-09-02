@@ -165,6 +165,11 @@ interface AppState {
    * watch — and the canvas is worth the third of the height it was taking.
    */
   traceOpen: boolean;
+  /**
+   * Has the screen been given the whole window? The catalogue and the screen list are
+   * the 532px it takes, and once a screen is chosen neither is being read.
+   */
+  stageFull: boolean;
   /** `"fr"` shows the database as authored; any other locale applies an overlay. */
   locale: string;
   /** Entries in the loaded overlay, for the strip's coverage readout. */
@@ -294,6 +299,7 @@ interface AppState {
 
 const CATALOGUE_KEY = "ddtx.catalogueOpen";
 const TRACE_KEY = "ddtx.traceOpen";
+const STAGE_KEY = "ddtx.stageFull";
 
 function readFlag(key: string, fallback: boolean): boolean {
   try {
@@ -379,6 +385,7 @@ export const app = $state<AppState>({
   zoom: VIEW_DEFAULTS.zoom,
   catalogueOpen: readFlag(CATALOGUE_KEY, true),
   traceOpen: readFlag(TRACE_KEY, false),
+  stageFull: readFlag(STAGE_KEY, false),
   locale: VIEW_DEFAULTS.locale,
   overlaySize: 0,
   overlayVersion: 0,
@@ -415,6 +422,21 @@ export const app = $state<AppState>({
 export function setCatalogueOpen(open: boolean): void {
   app.catalogueOpen = open;
   writeFlag(CATALOGUE_KEY, open);
+}
+
+/**
+ * Give the screen the whole window, or dock it again.
+ *
+ * The catalogue and the screen list cost 532px of width, and some screens are wider
+ * than what is left — the twip canvas is a fixed size the database chose, so a screen
+ * that does not fit is scrolled rather than reflowed. Once an ECU and a screen are
+ * chosen, neither panel is doing anything.
+ *
+ * Remembered, because someone reading live values wants the same layout next time.
+ */
+export function setStageFull(full: boolean): void {
+  app.stageFull = full;
+  writeFlag(STAGE_KEY, full);
 }
 
 export function setTraceOpen(open: boolean): void {
