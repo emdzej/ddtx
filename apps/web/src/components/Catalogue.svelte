@@ -276,6 +276,13 @@
     grid-area: name;
     font-size: 12.5px;
     line-height: 1.3;
+    /*
+      Without this the row's min-content width is the longest unbreakable identifier,
+      which pushes the grid column wider than the panel and spills the name over the
+      divider. Broken, not ellipsed — see the note on the same rule in Contents.
+    */
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .meta {

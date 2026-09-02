@@ -113,8 +113,51 @@ select {
   }
 }
 
-/* Scrollbars: thin and unobtrusive, since three columns all scroll. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--rule) transparent;
+/*
+ * Scrollbars: thin, unobtrusive, and drawn always rather than on demand.
+ *
+ * macOS defaults to overlay scrollbars, which appear during a gesture and fade. A wheel
+ * scrolls vertically, so the vertical bar shows itself and the horizontal one never
+ * does — leaving a screen wider than the stage looking clipped rather than scrollable.
+ * `::-webkit-scrollbar` opts the app out of overlay scrollbars; `scrollbar-width` and
+ * `scrollbar-color` do not, and worse, Chromium *ignores* the pseudo-elements on any
+ * element where either standard property is set. Setting both on `*`, as this file
+ * used to, silently disabled every rule below.
+ *
+ * So they are fenced apart: the standard properties go to engines with no
+ * `::-webkit-scrollbar` to be ignored in favour of — Firefox — and everything else
+ * gets the pseudo-elements.
+ *
+ * They cost 10px of the box in return. Worth it: a scrollbar you cannot see is a
+ * screen you do not know you can reach.
+ */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--paper);
+}
+
+::-webkit-scrollbar-thumb {
+  /* Square, like everything else here. A hairline border keeps it off the track edge. */
+  background: var(--rule);
+  border: 2px solid var(--paper);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+}
+
+/* Where both bars meet, so the notch is not a hole in the corner. */
+::-webkit-scrollbar-corner {
+  background: var(--paper);
 }

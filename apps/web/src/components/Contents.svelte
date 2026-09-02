@@ -122,6 +122,14 @@
     font-size: 15px;
     font-weight: 600;
     line-height: 1.25;
+    /*
+      ECU names are identifiers, so many hold no space to wrap at:
+      `15-40_V35_CAN_V_MESSAGE_LIST_OFFICIAL_04_03_2016` is one word 47 characters long
+      and ran straight out of this 244px column onto the canvas. Broken mid-token
+      rather than ellipsed, because what distinguishes these names is their tail — the
+      version and the date — and `15-40_V3…` names two different ECUs.
+    */
+    overflow-wrap: anywhere;
   }
 
   dl {

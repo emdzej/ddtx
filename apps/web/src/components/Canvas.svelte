@@ -259,6 +259,14 @@
   .plate {
     margin: 0;
     padding: 22px 24px 18px;
+    /*
+      Sized to content like the frame it holds, so its own padding is inside its box.
+      Left as a plain block it would be the scroller's width, and the trailing padding
+      would fall outside the scroll extent — the plate's right edge then sits flush
+      against the end of the scroll with no margin at all.
+    */
+    width: max-content;
+    min-width: 100%;
   }
 
   /* The mount: a hairline plate with corner ticks, as a technical figure. */
