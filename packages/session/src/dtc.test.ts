@@ -460,3 +460,103 @@ describe("Standard Fault and Specific Fault share the same bits", () => {
     expect(codes).toEqual(["0380", "0571", "2502"]);
   });
 });
+
+describe("naming a code the field's enum does not describe", () => {
+  /**
+   * `devices` is the ECU's own DTC catalogue, mapping a code to a description. It holds
+   * 95,135 non-zero codes across 1,020 ECUs that the corresponding enum does not, so
+   * without consulting it those faults read as a bare number while a name sits in the
+   * same file.
+   */
+  function ecuWithCatalogue(devices: Array<{ dtc: number; name: string }>): LoadedEcu {
+    const data: Record<string, DataDef> = {
+      NDTC: { bitscount: 8 } as DataDef,
+      // Deliberately names only 0x1111, so 0x2502 has to come from the catalogue.
+      FirstDTC: { bitscount: 16, lists: { "4369": "a fault the enum knows" } } as DataDef,
+    };
+    const request: RequestDef = {
+      name: "ReadDTC",
+      deny_sds: [],
+      sentbytes: "17FF00",
+      minbytes: 2,
+      shiftbytescount: 2,
+      receivebyte_dataitems: { NDTC: { firstbyte: 2 }, FirstDTC: { firstbyte: 3 } },
+    };
+    const resolved = resolveDataDictionary(data);
+    return {
+      slug: "cat",
+      def: {
+        ecuname: "CAT",
+        obd: { protocol: "CAN", funcaddr: "7A", funcname: "Injection" } as ObdConfig,
+        autoidents: [],
+        requests: [request],
+        data,
+        devices: devices.map((d) => ({ ...d, dtctype: 0, devicedata: {} })),
+      } as unknown as LoadedEcu["def"],
+      endianness: "Big",
+      data: resolved,
+      requests: new Map([
+        [request.name, { def: request, endianness: "Big" as const, data: resolved }],
+      ]),
+    };
+  }
+
+  /** Two records: 0x1111 which the enum names, 0x2502 which only the catalogue does. */
+  const REPLY = "57 02 11 11 25 02";
+
+  it("names a code from the DTC catalogue when the enum cannot", async () => {
+    const { driver } = harness((f) => (f.replace(/\s+/g, "") === "17FF00" ? REPLY : "NO DATA"));
+
+    const result = await readDtcs(
+      driver,
+      ecuWithCatalogue([{ dtc: 0x2502, name: "Oil level sensor monitoring" }]),
+    );
+
+    const second = result.records[1]?.fields.find((f) => f.name === "FirstDTC");
+    expect(second?.value).toBe("Oil level sensor monitoring");
+    expect(second?.labelled).toBe(true);
+    // Flagged, because it came from a different table than the field's own enum.
+    expect(second?.source).toBe("devices");
+  });
+
+  it("prefers the field's own enum over the catalogue", async () => {
+    // Both describe 0x1111; the enum is the field's own and wins.
+    const { driver } = harness((f) => (f.replace(/\s+/g, "") === "17FF00" ? REPLY : "NO DATA"));
+
+    const result = await readDtcs(
+      driver,
+      ecuWithCatalogue([{ dtc: 0x1111, name: "the catalogue's name" }]),
+    );
+
+    const first = result.records[0]?.fields.find((f) => f.name === "FirstDTC");
+    expect(first?.value).toBe("a fault the enum knows");
+    expect(first?.source).toBeUndefined();
+  });
+
+  it("never resolves a code from a dtc: 0 placeholder", async () => {
+    // 24,021 device entries carry dtc 0. Mapping an unresolved zero to whichever device
+    // was listed first would invent a fault.
+    const { driver } = harness((f) =>
+      f.replace(/\s+/g, "") === "17FF00" ? "57 01 00 00" : "NO DATA",
+    );
+
+    const result = await readDtcs(
+      driver,
+      ecuWithCatalogue([{ dtc: 0, name: "a placeholder that must not be used" }]),
+    );
+
+    const field = result.records[0]?.fields.find((f) => f.name === "FirstDTC");
+    expect(field?.labelled).toBe(false);
+    expect(field?.value).toBe("0");
+  });
+
+  it("leaves a genuinely unknown code as a number", async () => {
+    const { driver } = harness((f) => (f.replace(/\s+/g, "") === "17FF00" ? REPLY : "NO DATA"));
+
+    const result = await readDtcs(driver, ecuWithCatalogue([]));
+
+    const second = result.records[1]?.fields.find((f) => f.name === "FirstDTC");
+    expect(second?.labelled).toBe(false);
+    expect(second?.value).toBe(String(0x2502));
+  });
+});

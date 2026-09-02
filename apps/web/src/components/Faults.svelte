@@ -116,8 +116,26 @@
               <dl>
                 {#each record.fields as field (field.name)}
                   <dt>{t("data", field.name)}</dt>
-                  <dd class:labelled={field.labelled}>
-                    {field.labelled ? t("list", field.value) : field.value}
+                  <dd class:labelled={field.labelled} class:bare={!field.labelled}>
+                    {#if field.labelled}
+                      {t("list", field.value)}
+                      {#if field.source === "devices"}
+                        <!-- Named from the ECU's DTC catalogue rather than the field's
+                             own enum. Same file, different table. -->
+                        <span class="from" title="Named from this ECU's DTC catalogue">cat</span>
+                      {/if}
+                    {:else}
+                      <!--
+                        No authored name for this value. Saying so beats a naked integer,
+                        which reads as a decode failure when it is simply a code this
+                        ECU's file does not describe — and in demo mode the values are
+                        generated, so almost nothing resolves.
+                      -->
+                      <span class="unnamed">{field.value}</span>
+                      <span class="from muted" title="Neither this field's enum nor the ECU's DTC catalogue names this value">
+                        unnamed
+                      </span>
+                    {/if}
                     <span class="raw hex">{field.hex}</span>
                   </dd>
                 {/each}
@@ -283,6 +301,29 @@
 
   dd.labelled {
     font-weight: 600;
+  }
+
+  /* Where a label came from, or that there is none. Small, and never louder than the
+     value it annotates. */
+  .from {
+    display: inline-block;
+    margin-left: 5px;
+    padding: 0 3px;
+    background: var(--blue);
+    color: #fff;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    vertical-align: 1px;
+  }
+
+  .from.muted {
+    background: var(--ink-faint);
+  }
+
+  .unnamed {
+    color: var(--ink-soft);
   }
 
   .raw {

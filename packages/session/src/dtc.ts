@@ -32,6 +32,14 @@ export interface DtcField {
   value: string;
   /** True when `value` came from a `lists` map rather than being a number. */
   labelled: boolean;
+  /**
+   * Where the label came from, when it was not the field's own enum.
+   *
+   * Worth surfacing: a name resolved from the DTC catalogue is as authored as one from
+   * the enum, but it is a different table and a reader chasing a discrepancy will want
+   * to know which.
+   */
+  source?: "devices";
 }
 
 export interface DtcRecord {
@@ -197,6 +205,8 @@ function decodeField(
   item: Parameters<typeof getHexValue>[1],
   endianness: LoadedEcu["endianness"],
   window: string,
+  /** The ECU's DTC catalogue, for codes its enum cannot name. See `deviceNames`. */
+  devices?: ReadonlyMap<number, string>,
 ): DtcField | null {
   const hex = getHexValue(data, item, endianness, window);
   if (hex === null) return null;
@@ -204,7 +214,35 @@ function decodeField(
   const numeric = Number.parseInt(hex, 16);
   const label = Number.isNaN(numeric) ? undefined : data.lists.get(numeric);
   if (label !== undefined) return { name, hex, value: label, labelled: true };
+
+  // The enum could not name it, so try the ECU's own DTC catalogue. `devices` maps a
+  // code to a description, and it holds **95,135 codes across 1,020 ECUs that the enum
+  // does not** — so without this those faults read as a bare number where a name exists
+  // in the same file.
+  if (!Number.isNaN(numeric) && devices !== undefined) {
+    const named = devices.get(numeric);
+    if (named !== undefined) {
+      return { name, hex, value: named, labelled: true, source: "devices" };
+    }
+  }
+
   return { name, hex, value: Number.isNaN(numeric) ? hex : String(numeric), labelled: false };
+}
+
+/**
+ * The ECU's DTC catalogue, as a lookup.
+ *
+ * `dtc: 0` is skipped: 24,021 device entries carry it, which is a placeholder rather
+ * than a real code — mapping every unresolved zero to whichever device happened to be
+ * listed first would invent a fault.
+ */
+function deviceNames(ecu: LoadedEcu): ReadonlyMap<number, string> {
+  const byCode = new Map<number, string>();
+  for (const device of ecu.def.devices ?? []) {
+    if (device.dtc === 0) continue;
+    if (!byCode.has(device.dtc)) byCode.set(device.dtc, device.name);
+  }
+  return byCode;
 }
 
 /**
@@ -327,6 +365,8 @@ export async function readDtcs(
   const records: DtcRecord[] = [];
   let window = bytes;
 
+  const devices = deviceNames(ecu);
+
   for (let n = 0; n < declared; n++) {
     const spaced = window.join(" ");
     const fields: DtcField[] = [];
@@ -334,7 +374,7 @@ export async function readDtcs(
     for (const [name, item] of receiveItems) {
       const data = ecu.data.get(name);
       if (data === undefined) continue;
-      const field = decodeField(name, data, item, ecu.endianness, spaced);
+      const field = decodeField(name, data, item, ecu.endianness, spaced, devices);
       if (field !== null) fields.push(field);
     }
 
