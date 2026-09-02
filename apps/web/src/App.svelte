@@ -16,6 +16,9 @@
   import Popover from "./components/Popover.svelte";
   import Settings from "./components/Settings.svelte";
   import Trace from "./components/Trace.svelte";
+  // Lucide (ISC), imported per icon so the rest of the pack is tree-shaken away.
+  import Maximize2 from "@lucide/svelte/icons/maximize-2";
+  import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import {
     loadPlugins,
     setPluginsOpen,
@@ -111,7 +114,7 @@
 
     <a
       class="version"
-      href={`${__REPO_URL__}/releases/tag/v${__APP_VERSION__}`}
+      href={`${__REPO_URL__}/releases/tag/${__APP_VERSION__}`}
       target="_blank"
       rel="noopener noreferrer"
       title="Release notes for this version"
@@ -328,7 +331,11 @@
       aria-pressed={stageFull}
       aria-label={stageFull ? "Dock the screen" : "Full screen"}
     >
-      {stageFull ? "⤡" : "⤢"}
+      {#if stageFull}
+        <Minimize2 size={15} strokeWidth={1.9} />
+      {:else}
+        <Maximize2 size={15} strokeWidth={1.9} />
+      {/if}
     </button>
   </div>
 
@@ -786,24 +793,32 @@
     letter-spacing: 0.04em;
   }
 
-  /* Square, glyph-only and unlabelled: the strip is already at eleven controls and
-     this one is recognisable without a word. */
+  /*
+    Icon-only and unlabelled: the strip is already at eleven controls and this one is
+    recognisable without a word. No border either — a box around a single glyph reads
+    as an empty control next to the labelled ones, so the hover tint is the affordance
+    and the pressed state is a filled square.
+  */
   .expand {
-    padding: 3px 7px;
-    background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.4);
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 22px;
+    padding: 0;
+    background: none;
+    border: 0;
     color: #fff;
-    font-size: 12px;
-    line-height: 1.1;
   }
 
-  .expand:hover:not(:disabled),
+  .expand:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.22);
+  }
+
   .expand[aria-pressed="true"] {
     background: rgba(255, 255, 255, 0.28);
   }
 
   .expand:disabled {
-    border-color: rgba(255, 255, 255, 0.18);
     color: #8f93cc;
     cursor: not-allowed;
   }

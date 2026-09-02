@@ -321,7 +321,13 @@
     font-size: 11.5px;
   }
 
-  button:hover:not(:disabled) {
+  /*
+    `:where()` so this contributes no specificity beyond the element and `:hover`
+    (0,1,1). Written as `:not(:disabled)` it scored 0,2,1 and outranked every
+    single-class hover in the file — which is how the destructive button's white
+    label lost to this blue one and rendered blue on red.
+  */
+  button:hover:where(:not(:disabled)) {
     border-color: var(--blue);
     color: var(--blue);
   }

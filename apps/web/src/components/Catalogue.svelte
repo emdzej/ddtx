@@ -25,6 +25,9 @@
     selectVehicle,
     setCatalogueOpen,
   } from "../lib/state.svelte.js";
+  // Lucide (ISC), imported per icon so the rest of the pack is tree-shaken away.
+  import PanelLeftClose from "@lucide/svelte/icons/panel-left-close";
+  import PanelLeftOpen from "@lucide/svelte/icons/panel-left-open";
 </script>
 
 {#if !app.catalogueOpen}
@@ -36,12 +39,15 @@
       title="Show the catalogue"
       aria-expanded="false"
     >
-      <span aria-hidden="true">›</span>
+      <PanelLeftOpen size={16} strokeWidth={1.75} />
       <span class="sr">Show the catalogue</span>
     </button>
-    {#if app.selected !== null}
-      <span class="rail-addr hex">{app.selected.address}</span>
-    {/if}
+    <!--
+      No address here. It used to show `app.selected.address`, which in a 40px rail is a
+      bare `00` with nothing to say what it counts — and the screen list immediately to
+      the right already shows the same value under an `Addr` label. A duplicate stripped
+      of the label that gave it meaning is worse than no duplicate.
+    -->
     <span class="rail-label">Catalogue</span>
   </section>
 {:else}
@@ -56,7 +62,7 @@
         title="Hide the catalogue"
         aria-expanded="true"
       >
-        <span aria-hidden="true">‹</span>
+        <PanelLeftClose size={16} strokeWidth={1.75} />
         <span class="sr">Hide the catalogue</span>
       </button>
     </span>
@@ -143,11 +149,6 @@
     background: var(--card);
   }
 
-  .rail-addr {
-    color: var(--blue);
-    font-weight: 600;
-  }
-
   /* Rotated so the rail is identifiable without needing width for it. */
   .rail-label {
     writing-mode: vertical-rl;
@@ -158,23 +159,25 @@
     color: var(--ink-faint);
   }
 
+  /*
+    An icon button, so no border: the glyph is the whole control, and a box around it
+    reads as a second, empty element sitting beside the count. The hover tint carries
+    the affordance instead.
+  */
   .toggle {
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     padding: 0;
     background: none;
-    border: 1px solid var(--rule);
-    color: var(--ink-soft);
-    font-size: 13px;
-    line-height: 1;
+    border: 0;
+    color: var(--ink-faint);
   }
 
   .toggle:hover {
     background: var(--paper);
     color: var(--blue);
-    border-color: var(--blue);
   }
 
   .header-right {

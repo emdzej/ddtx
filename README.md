@@ -20,14 +20,18 @@ against 5.7 ms for the host↔adapter round trip. The ECU is 50–150× the link
 the answer to the question the whole port was hedged on: browser latency is noise.
 
 What is **not** verified: nothing has been written to a vehicle. Writes are gated behind
-an explicit toggle, an adapter lock and a confirmation, and the twelve ported hardware
+an explicit toggle, an adapter lock and a confirmation, and the thirteen ported hardware
 procedures are marked unverified because they are — airbag resets and EEPROM erases are
 not things to test speculatively.
 
 Demo mode remains the offline path: all 1,580 ECUs and 39,665 screens, values replayed
 from the database, no adapter needed.
 
-Documentation is in [`docs/`](docs/README.md):
+**Driving it is [`docs/user-guide.md`](docs/user-guide.md)** — the database, the
+catalogue, reading a screen, fault codes, the write gates, and what to check when a
+value looks wrong. Start there if you want to use ddtx rather than change it.
+
+The rest of the documentation is in [`docs/`](docs/README.md):
 
 - [`architecture.md`](docs/architecture.md) — how it works, following one value to
   the screen and one click to the bus. **Start here.**

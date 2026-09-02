@@ -1,9 +1,11 @@
 # ddtx documentation
 
-Seven documents, in the order they are useful.
+Eight documents, in the order they are useful. The first is for operating ddtx; the
+rest are for changing it.
 
 |                                                |                                                                                                                                                                                      |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [**user-guide.md**](user-guide.md)             | Operating it on a car. Getting the database in, demo mode versus a live vehicle, the sweep, reading screens, fault codes, the write gates, and what an absurd-looking value usually means                |
 | [**architecture.md**](architecture.md)         | How it works. Follows one value from the database to the screen and one click from the screen to the bus, which covers most of the system. Start here                                |
 | [**ecu-format.md**](ecu-format.md)             | Reference for the ECU database format — every field, measured over all 1,580 ECUs, with the quirks and the outright data faults. No such reference exists upstream                   |
 | [**protocols.md**](protocols.md)               | What goes on the wire: ISO-TP framing, the AT sequences and why each command is there, K-line init modes, fault reads, and what a browser cannot reach                               |

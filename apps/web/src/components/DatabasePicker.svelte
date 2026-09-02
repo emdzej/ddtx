@@ -243,7 +243,8 @@
     font-size: 12px;
   }
 
-  button:hover:not(:disabled) {
+  /* See the note in Settings.svelte: `:where()` keeps this below class hovers. */
+  button:hover:where(:not(:disabled)) {
     border-color: var(--blue);
     color: var(--blue);
   }

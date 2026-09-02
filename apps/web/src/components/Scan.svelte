@@ -140,7 +140,8 @@
     text-align: left;
   }
 
-  button:hover:not(:disabled) {
+  /* See the note in Settings.svelte: `:where()` keeps this below class hovers. */
+  button:hover:where(:not(:disabled)) {
     background: var(--paper);
   }
 

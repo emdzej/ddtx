@@ -2,7 +2,7 @@
   "name": "@ddtx/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Browser client for ddtx \u2014 browse the ECU database and render screens, in demo mode or against a vehicle",
+  "description": "Browser client for ddtx — browse the ECU database and render screens, in demo mode or against a vehicle",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
@@ -21,7 +21,8 @@
     "@ddtx/link": "workspace:*",
     "@ddtx/plugin-sdk": "workspace:*",
     "@ddtx/screens": "workspace:*",
-    "@ddtx/session": "workspace:*"
+    "@ddtx/session": "workspace:*",
+    "@lucide/svelte": "^1.39.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
