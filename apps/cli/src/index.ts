@@ -93,7 +93,14 @@ interface Args {
   booleans: Set<string>;
 }
 
-function parseArgs(argv: readonly string[]): Args {
+function parseArgs(argvIn: readonly string[]): Args {
+  let argv = argvIn;
+  // `pnpm cli -- checkup` forwards the `--` as a real argument, so the first token
+  // becomes `--` and every command looks unknown — a usage dump instead of the thing
+  // asked for. Dropping a leading bare `--` costs nothing and `pnpm cli checkup` and
+  // `pnpm cli -- checkup` then behave the same.
+  if (argv[0] === "--") argv = argv.slice(1);
+
   const flags = new Map<string, string>();
   const booleans = new Set<string>();
   const positional: string[] = [];

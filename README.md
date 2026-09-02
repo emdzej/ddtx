@@ -4,9 +4,28 @@ Browser-based Renault/Dacia/Nissan ECU diagnostics — a TypeScript port of
 [DDT4All](https://github.com/cedricp/ddt4all) that runs entirely client-side
 against an ELM327-family adapter over Web Serial.
 
-Status: **demo mode works.** Browse all 1,580 ECUs and render any of their 39,665
-screens, with values replayed from the database. Nothing talks to a vehicle yet —
-that waits on the ELM327 driver.
+**Live at [ddtx.emdzej.pl](https://ddtx.emdzej.pl/)** — it ships without the database,
+so bring your own `ecu.zip` and it unpacks into the browser.
+
+## Status: it reads a real vehicle
+
+Verified on a Renault Master II over K-line KWP2000. The sweep identified four fitted
+modules, matched two of them against the catalogue exactly, and read stored faults off
+both the ABS and the engine ECU — two rear-right wheel faults and a brake switch on the
+first, a glow plug relay and the same brake switch on the second. Two independent
+modules agreeing on the brake switch is what a working decode looks like.
+
+**Real ECU response time is p50 299 ms on the ABS and 885 ms on the airbag module**,
+against 5.7 ms for the host↔adapter round trip. The ECU is 50–150× the link, which is
+the answer to the question the whole port was hedged on: browser latency is noise.
+
+What is **not** verified: nothing has been written to a vehicle. Writes are gated behind
+an explicit toggle, an adapter lock and a confirmation, and the twelve ported hardware
+procedures are marked unverified because they are — airbag resets and EEPROM erases are
+not things to test speculatively.
+
+Demo mode remains the offline path: all 1,580 ECUs and 39,665 screens, values replayed
+from the database, no adapter needed.
 
 Documentation is in [`docs/`](docs/README.md):
 
@@ -19,6 +38,10 @@ Documentation is in [`docs/`](docs/README.md):
   K-line init modes, and what a browser cannot reach.
 - [`plan.md`](docs/plan.md) — why the port is shaped this way: feasibility,
   the reuse audit and its licensing conclusion, ranked risks, roadmap.
+- [`database-install.md`](docs/database-install.md) — how the database gets into the
+  browser: three sources behind one `read(path)`, and why the importer queues writes.
+- [`plugins.md`](docs/plugins.md) — the WebAssembly plugin system: why a diagnostic
+  procedure cannot use an image-filter ABI, and what is verified about the ports.
 - [`i18n-overlay.md`](docs/i18n-overlay.md) — the translation overlay, and why the
   database's strings being its primary keys makes it non-obvious.
 
@@ -49,6 +72,21 @@ straight into the browser, which is what a deployed build does. See
 | `pnpm i18n:build`     | Hash the authored translations into a runtime bundle                   |
 
 The split tree is ~1.2 GB and lives under the git-ignored `data/`.
+
+### On a vehicle
+
+`ddtx checkup` is the read-only battery to start with — adapter, a sweep for fitted
+modules, then per module its identity, real response timing, long-reply behaviour and
+stored faults, in one report. It writes nothing: no clears, no actuations, and it filters
+to read services so it cannot.
+
+```sh
+pnpm cli checkup --port /dev/tty.usbserial-10 --bus kline --vehicle x70
+pnpm cli dtc     --port /dev/tty.usbserial-10 --ecu <slug>     # add --clear to erase
+```
+
+`--bus` matters: Master II is 15 K-line ECUs to 2 on CAN, so a CAN-only sweep finds
+nothing on one. Anything irreversible stays a separate, explicit command.
 
 ## Layout
 
@@ -84,7 +122,7 @@ tools/
 | Workflow      | Trigger             | What it does                                                                       |
 | ------------- | ------------------- | ---------------------------------------------------------------------------------- |
 | `ci.yml`      | push to `main`, PRs | Build, typecheck, compile plugins, assert they import nothing, test, build the app |
-| `pages.yml`   | push to `main`      | Deploy the app to GitHub Pages under `/<repo>/`                                    |
+| `pages.yml`   | push to `main`      | Deploy the app to GitHub Pages                                                     |
 | `release.yml` | a `v*` tag          | Publish the app and plugin bundle as tarballs with checksums                       |
 
 Three things about them are worth knowing:
@@ -99,9 +137,18 @@ compiled plugin module.
 `ecu.zip` into their browser. The VIN CRC calculator works before they do, because it
 needs neither a vehicle nor a database.
 
-**A build cannot be relocated after the fact.** `BASE_PATH` is baked in at build time,
-so the Pages build sets `/<repo>/` and the release tarball is built for a domain root.
-To self-host under a subpath, rebuild with `BASE_PATH=/prefix/`.
+**A build cannot be relocated after the fact.** `BASE_PATH` is baked into the bundle, so
+where the site will live has to be known when it is built. The Pages workflow reads
+`apps/web/public/CNAME`: present means a custom domain and a root build, absent means
+`<user>.github.io/<repo>/`. That is the same file GitHub reads to keep the domain
+attached, so there is one fact in one place.
+
+Getting it wrong fails in an unhelpful way — `index.html` still returns 200 and every
+asset 404s — which is exactly what shipping a `/ddtx/` build to a root domain did. The
+workflow now asserts the emitted asset paths match the base it chose.
+
+Release tarballs are built for a domain root; to self-host under a prefix, rebuild with
+`BASE_PATH=/prefix/`.
 
 ## Licensing
 

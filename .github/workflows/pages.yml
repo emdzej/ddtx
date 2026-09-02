@@ -47,12 +47,32 @@ jobs:
         # database, only the authored sources under `i18n/source/`.
         run: pnpm i18n:build
 
+      - name: Work out the base path
+        id: base
+        # A custom domain serves the site at the **root**; the default
+        # `<user>.github.io/<repo>/` serves it under a prefix. `base` is baked in at
+        # build time and a build cannot be relocated afterwards, so this has to be
+        # decided here and it has to be right.
+        #
+        # `apps/web/public/CNAME` is the signal, because it is the same file GitHub reads
+        # to keep the custom domain attached. One fact, one place — and a fork with no
+        # CNAME still gets a working prefixed build.
+        run: |
+          set -euo pipefail
+          if [ -f apps/web/public/CNAME ]; then
+            echo "path=/" >> "$GITHUB_OUTPUT"
+            echo "custom domain $(cat apps/web/public/CNAME) — building for the root"
+          else
+            echo "path=/${{ github.event.repository.name }}/" >> "$GITHUB_OUTPUT"
+            echo "no CNAME — building for /${{ github.event.repository.name }}/"
+          fi
+
       - name: Build the web app
         env:
-          # Pages serves under /<repo>/. Vite's `base` comes from this, and every runtime
-          # fetch — plugins, translations, the database URL default — goes through
-          # `import.meta.env.BASE_URL`, so nothing is hardcoded to the root.
-          BASE_PATH: /${{ github.event.repository.name }}/
+          # Vite's `base` comes from this, and every runtime fetch — plugins,
+          # translations, the database URL default — goes through
+          # `import.meta.env.BASE_URL`, so nothing is hardcoded either way.
+          BASE_PATH: ${{ steps.base.outputs.path }}
         run: pnpm web:build
 
       # The deployed site ships **no ECU database**, deliberately. It is 1.19 GB
@@ -62,15 +82,30 @@ jobs:
       #
       # So a fresh visit lands on the picker, and the VIN CRC calculator works
       # immediately because it needs no vehicle and no database.
-      - name: Check the build is self-contained
+      - name: Check the build is self-contained and correctly based
         run: |
           set -euo pipefail
+          BASE='${{ steps.base.outputs.path }}'
           test -f apps/web/dist/index.html
           test -f apps/web/dist/plugins/index.json
+          test -f apps/web/dist/i18n/en/bundle.json
           echo "plugins: $(node -e 'console.log(require("./apps/web/dist/plugins/index.json").length)')"
-          # An absolute /assets/ reference would 404 under the subpath, silently for
-          # anything fetched at runtime. Assert the base actually got applied.
-          grep -q 'src="/${{ github.event.repository.name }}/assets/' apps/web/dist/index.html
+
+          # The failure this catches is nasty because index.html still returns 200: the
+          # page loads and every asset 404s. That is exactly what shipping a /ddtx/ build
+          # to a root domain did.
+          if ! grep -q "src=\"${BASE}assets/" apps/web/dist/index.html; then
+            echo "index.html does not reference assets under ${BASE}:" >&2
+            grep -oE '(src|href)="[^"]*assets[^"]*"' apps/web/dist/index.html >&2
+            exit 1
+          fi
+          echo "assets are referenced under ${BASE}"
+
+          # A CNAME in the artifact is what keeps the custom domain attached.
+          if [ -f apps/web/public/CNAME ]; then
+            test -f apps/web/dist/CNAME
+            echo "CNAME deployed: $(cat apps/web/dist/CNAME)"
+          fi
 
       - uses: actions/configure-pages@v6
 
