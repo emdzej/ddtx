@@ -29,7 +29,8 @@
     "i18n:extract": "python3 tools/i18n/extract.py extract data/tree /tmp/ddtx-i18n.json",
     "i18n:build": "python3 tools/i18n/extract.py build data/tree en i18n/source/en i18n/en",
     "i18n:coverage": "python3 tools/i18n/extract.py coverage data/tree i18n/source/en",
-    "plugins:build": "pnpm --filter \"./packages/plugins/*\" run build && node tools/bundle-plugins.mjs"
+    "plugins:build": "pnpm --filter \"./packages/plugins/*\" run build && node tools/bundle-plugins.mjs",
+    "i18n:check": "node tools/i18n/check-ui.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.13.1",

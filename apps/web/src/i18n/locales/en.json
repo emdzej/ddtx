@@ -46,7 +46,6 @@
     "title": "Interface language, database language, zoom, and layout inspection",
     "interface": "Interface",
     "interfaceTitle": "The language of ddtx's own buttons and dialogs",
-    "interfaceSystem": "Match my browser",
     "interfaceSystemResolved": "Match my browser — {{language}}",
     "database": "Database",
     "databaseTitle": "Original shows the database exactly as authored — mostly French, but a third of it is already English",
@@ -110,8 +109,6 @@
     "unrecognised": "unrecognised",
     "approximate": "closest match",
     "identity": "· supplier {{supplier}} · soft {{soft}}",
-    "found_one": "{{count}} module answered.",
-    "found_other": "{{count}} modules answered.",
     "summary": "{{found}} of {{probed}} addresses answered in {{seconds}} s",
     "summaryStopped": "{{found}} of {{probed}} addresses answered in {{seconds}} s (stopped)"
   },

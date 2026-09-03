@@ -46,7 +46,6 @@
     "title": "Język interfejsu, język bazy danych, powiększenie i podgląd układu",
     "interface": "Interfejs",
     "interfaceTitle": "Język przycisków i okien samego ddtx",
-    "interfaceSystem": "Zgodnie z przeglądarką",
     "interfaceSystemResolved": "Zgodnie z przeglądarką — {{language}}",
     "database": "Baza danych",
     "databaseTitle": "Oryginał pokazuje bazę dokładnie tak, jak została napisana — głównie po francusku, choć jedna trzecia jest już po angielsku",
@@ -114,10 +113,6 @@
     "unrecognised": "nierozpoznany",
     "approximate": "najbliższe dopasowanie",
     "identity": "· dostawca {{supplier}} · oprogr. {{soft}}",
-    "found_one": "Odpowiedział {{count}} moduł.",
-    "found_few": "Odpowiedziały {{count}} moduły.",
-    "found_many": "Odpowiedziało {{count}} modułów.",
-    "found_other": "Odpowiedziało {{count}} modułu.",
     "summary": "Odpowiedziało {{found}} z {{probed}} adresów w {{seconds}} s",
     "summaryStopped": "Odpowiedziało {{found}} z {{probed}} adresów w {{seconds}} s (przerwano)"
   },

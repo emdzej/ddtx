@@ -213,9 +213,21 @@ follow the *Database* setting, never the interface one.
 ### Adding a language
 
 Copy `apps/web/src/i18n/locales/en.json`, translate the values, and register the tag in
-`UI_LOCALES`. Two things the tests will hold you to: every key English has, and every
-plural form your language uses — `Intl.PluralRules` decides how many that is, and it is
-four for Polish where English has two.
+`UI_LOCALES`. Then:
+
+```sh
+pnpm i18n:check
+```
+
+It prints coverage per locale and separates what must be fixed from what is only worth
+knowing. **Errors** fail the build: a missing key, a missing plural form for your
+language, or a `{{variable}}` that English has and yours does not. **Warnings** do not,
+because an incomplete locale has to be able to land — you will see the percentage, any
+value still identical to English, and any key nothing references.
+
+Plural forms are the part worth care: `Intl.PluralRules` decides how many your language
+needs, and it is four for Polish where English has two. The check asks the platform
+rather than assuming.
 
 ## 9. When something looks wrong
 

@@ -51,6 +51,15 @@ jobs:
         # regression is obvious in the checks list rather than buried in bundler output.
         run: node tools/check-plugin-imports.mjs
 
+      - name: Validate translations
+        # Its own step so a translation problem is a named line in the checks list
+        # rather than something to find inside a test summary. Errors here — a missing
+        # key, a missing plural category for the locale's language, a dropped
+        # `{{variable}}` — fail the build, and the parity test asserts the same ground
+        # so it also fails locally without CI. Coverage and dead keys are warnings:
+        # blocking on completeness would mean a new locale could never be started.
+        run: node tools/i18n/check-ui.mjs
+
       - name: Test
         # `pnpm test`, not `test:db`. The ECU database is not redistributable and `data/`
         # is git-ignored, so the tree-backed suites have nothing to run against and skip

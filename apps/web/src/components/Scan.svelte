@@ -12,7 +12,7 @@
   import { app, openScanResult, startScan, stopScan } from "../lib/state.svelte.js";
   import { ui } from "../lib/ui.svelte.js";
 
-  const vehicle = $derived(app.project === "" ? "every mapped address" : app.project);
+  const vehicle = $derived(app.project === "" ? ui("scan.everyAddress") : app.project);
 </script>
 
 <section class="scan">

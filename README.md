@@ -83,7 +83,8 @@ straight into the browser, which is what a deployed build does. See
 | `pnpm check`          | Build, typecheck, and the full test suite                              |
 | `pnpm plugins:build`  | Compile the WASM plugins and bundle them for the app                   |
 | `pnpm golden`         | Regenerate codec vectors from the Python original (see `tools/golden`) |
-| `pnpm i18n:build`     | Hash the authored translations into a runtime bundle                   |
+| `pnpm i18n:build`     | Hash the authored database translations into a runtime bundle          |
+| `pnpm i18n:check`     | Validate the interface catalogues — coverage, plurals, missing keys    |
 
 The split tree is ~1.2 GB and lives under the git-ignored `data/`.
 
