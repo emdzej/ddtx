@@ -125,4 +125,66 @@ describe.skipIf(!runnable)("the full-screen stage", () => {
       await browser.close();
     }
   }, 120_000);
+
+  it("hands the keyboard to the about dialog while it is open", async () => {
+    // The about dialog is reached from the wordmark, and its `Escape` has to beat the
+    // stage's. Both listen on `window`, so without the guard one keypress does two
+    // things: closing the dialog would also dock the screen behind it, and `F` would
+    // resize a stage the user cannot even see.
+    const { chromium } = await import("playwright-core");
+    const browser = await chromium.launch({ executablePath });
+    const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    const problems: string[] = [];
+    page.on("pageerror", (error) => problems.push(String(error)));
+
+    try {
+      await page.goto(url as string, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => {
+        localStorage.setItem("ddtx.dbSource", "remote");
+        localStorage.setItem("ddtx.dbRemoteUrl", "/db");
+        localStorage.removeItem("ddtx.stageFull");
+      });
+      await page.reload({ waitUntil: "networkidle" });
+      await page.waitForSelector("main", { timeout: 30_000 });
+
+      await page.getByText("[52]_CEPS_V1.1", { exact: true }).click();
+      await page.getByRole("button", { name: "Measurement", exact: true }).first().click();
+      await page.waitForSelector(".scroller", { timeout: 20_000 });
+
+      const stageWidth = () =>
+        page.evaluate(() =>
+          Math.round(document.querySelector(".stage")!.getBoundingClientRect().width),
+        );
+      const docked = await stageWidth();
+      const dialog = page.locator('[aria-label="About ddtx"]');
+
+      await page.getByRole("button", { name: "DDTX" }).click();
+      await page.waitForSelector('[aria-label="About ddtx"]', { timeout: 10_000 });
+
+      // The guide is the point of the dialog, so the link has to be right — a 404 here
+      // is invisible until someone clicks it.
+      expect(await dialog.getByRole("link", { name: "Read the user guide" }).getAttribute("href")).toBe(
+        "https://github.com/emdzej/ddtx/blob/main/docs/user-guide.md",
+      );
+
+      await page.keyboard.press("f");
+      await page.waitForTimeout(250);
+      expect(await stageWidth(), "F resized the stage behind the dialog").toBe(docked);
+      expect(await dialog.count(), "F closed the dialog").toBe(1);
+
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(300);
+      expect(await dialog.count(), "Escape did not close the dialog").toBe(0);
+      expect(await stageWidth(), "Escape reached the stage as well as the dialog").toBe(docked);
+
+      // Closed, the shortcut works again.
+      await page.keyboard.press("f");
+      await page.waitForTimeout(250);
+      expect(await stageWidth()).toBeGreaterThan(docked);
+
+      expect(problems).toEqual([]);
+    } finally {
+      await browser.close();
+    }
+  }, 120_000);
 });

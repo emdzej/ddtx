@@ -96,6 +96,8 @@ interface AppState {
   /** What the last import produced, so settings can show what is installed. */
   installed: TreeManifest | null;
   settingsOpen: boolean;
+  /** Is the about dialog up? Opened from the wordmark. */
+  aboutOpen: boolean;
   storage: { usage: number; quota: number } | null;
 
   /** Plugins found in the bundle, grouped in the UI by category. */
@@ -353,6 +355,7 @@ export const app = $state<AppState>({
   importError: null,
   installed: null,
   settingsOpen: false,
+  aboutOpen: false,
   storage: null,
   plugins: [],
   pluginsOpen: false,
@@ -846,6 +849,10 @@ export async function runPluginByName(name: string): Promise<void> {
     // Put the adapter back where the UI thinks it is.
     if (previousScreen !== undefined) await openScreen(previousScreen);
   }
+}
+
+export function setAboutOpen(open: boolean): void {
+  app.aboutOpen = open;
 }
 
 export function setSettingsOpen(open: boolean): void {

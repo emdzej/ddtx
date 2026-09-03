@@ -14,6 +14,7 @@
   import DatabasePicker from "./components/DatabasePicker.svelte";
   import Plugins from "./components/Plugins.svelte";
   import Popover from "./components/Popover.svelte";
+  import About from "./components/About.svelte";
   import Settings from "./components/Settings.svelte";
   import Trace from "./components/Trace.svelte";
   // Lucide (ISC), imported per icon so the rest of the pack is tree-shaken away.
@@ -23,6 +24,7 @@
     loadPlugins,
     setPluginsOpen,
     VIEW_DEFAULTS,
+    setAboutOpen,
     setSettingsOpen,
     setStageFull,
     app,
@@ -88,6 +90,10 @@
       }
     }
 
+    // A dialog owns the keyboard while it is up: `F` must not resize the stage behind
+    // it, and `Escape` belongs to the dialog, which closes itself.
+    if (app.aboutOpen || app.settingsOpen || app.pluginsOpen) return;
+
     if (event.key === "f" || event.key === "F") {
       if (app.screen === null) return;
       setStageFull(!stageFull);
@@ -95,7 +101,7 @@
       return;
     }
 
-    if (event.key === "Escape" && stageFull && !app.settingsOpen && !app.pluginsOpen) {
+    if (event.key === "Escape" && stageFull) {
       setStageFull(false);
     }
   }
@@ -110,7 +116,14 @@
       build-time literal from package.json rather than a runtime read, so it cannot
       disagree with the tag `release.yml` checks.
     -->
-    <span class="wordmark">DDT<span class="accent">X</span></span>
+    <button
+      class="wordmark"
+      onclick={() => setAboutOpen(true)}
+      title="About ddtx"
+      aria-haspopup="dialog"
+    >
+      DDT<span class="accent">X</span>
+    </button>
 
     <a
       class="version"
@@ -378,6 +391,10 @@
   </main>
   {/if}
 
+  {#if app.aboutOpen}
+    <About />
+  {/if}
+
   {#if app.settingsOpen}
     <Settings />
   {/if}
@@ -496,12 +513,24 @@
   }
 
 
+  /* A button, not a heading: it opens the about dialog. Styled as the wordmark it
+     already was, so the strip reads the same — the hover underline is the only hint,
+     which is enough for something nobody needs to find in a hurry. */
   .wordmark {
     flex-shrink: 0;
+    padding: 0;
+    background: none;
+    border: 0;
     color: #fff;
+    font-family: inherit;
     font-size: 12.5px;
     font-weight: 800;
     letter-spacing: 0.04em;
+  }
+
+  .wordmark:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   /*
