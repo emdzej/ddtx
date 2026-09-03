@@ -10,6 +10,9 @@ the database lives in your browser and the adapter talks straight to the page.
 > verified on a Renault Master II; writes are gated, and the thirteen ported procedures
 > are marked unverified because they are. An airbag reset or an EEPROM erase is not
 > something to try speculatively on a car you need to drive.
+>
+> This software comes with **no warranty**, and using it is at your own risk —
+> [full terms](../README.md#no-warranty).
 
 ---
 

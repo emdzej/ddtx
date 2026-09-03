@@ -7,6 +7,11 @@ against an ELM327-family adapter over Web Serial.
 **Live at [ddtx.emdzej.pl](https://ddtx.emdzej.pl/)** — it ships without the database,
 so bring your own `ecu.zip` and it unpacks into the browser.
 
+> **No warranty. Use at your own risk.** This software talks to real vehicle control
+> units, and writing to one can be irreversible. It is provided **as is**, and the
+> authors accept **no responsibility or liability** for how it is used or for any
+> consequence of using it. [Full terms below](#no-warranty).
+
 ## Status: it reads a real vehicle
 
 Verified on a Renault Master II over K-line KWP2000. The sweep identified four fitted
@@ -153,6 +158,39 @@ workflow now asserts the emitted asset paths match the base it chose.
 
 Release tarballs are built for a domain root; to self-host under a prefix, rebuild with
 `BASE_PATH=/prefix/`.
+
+## No warranty
+
+This software is provided **as is**, without warranty of any kind, express or implied,
+including but not limited to the warranties of merchantability, fitness for a particular
+purpose and non-infringement.
+
+The authors and contributors accept **no responsibility or liability** for how this
+software is used, or for any consequence of using it — including damage to a vehicle or
+its electronics, loss of stored data or configuration, a control unit left inoperable,
+cost of diagnosis or repair, or any effect on safety systems or on the vehicle's
+roadworthiness.
+
+Specific to this program, and worth stating plainly rather than leaving to the
+boilerplate:
+
+- **Writing to a control unit can be irreversible.** There is no undo, and some
+  operations erase memory that cannot be restored without the original data.
+- **Nothing here has been verified against a factory tool.** Reads are verified on one
+  vehicle; that is not the same thing.
+- **No procedure in this program has been confirmed on a real vehicle.** The thirteen
+  ported procedures are marked unverified because they are.
+- **You are responsible** for knowing what a command does before you send it, for
+  having the right to work on the vehicle, and for any legal or regulatory obligations
+  that apply where you are — including anything concerning emissions equipment,
+  odometers, immobilisers and keys.
+
+Using this software means accepting all of that. If you are not willing to, do not
+connect it to a vehicle — [demo mode](docs/user-guide.md#2-demo-mode-and-a-real-car)
+needs no car and carries none of this risk.
+
+This section restates in plain terms what sections 15 to 17 of the GPL already say;
+those sections are the operative text and apply in full. See [`LICENSE`](LICENSE).
 
 ## Licensing
 
