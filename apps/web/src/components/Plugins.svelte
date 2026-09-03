@@ -12,6 +12,7 @@
 -->
 <script lang="ts">
   import { app, runPluginByName, setPluginsOpen } from "../lib/state.svelte.js";
+  import { ui } from "../lib/ui.svelte.js";
 
   const running = $derived(app.pluginRunning);
   const outcome = $derived(app.pluginOutcome);
@@ -48,22 +49,21 @@
     role="dialog"
     aria-modal="true"
     tabindex="-1"
-    aria-label="Procedures"
+    aria-label={ui("plugins.title")}
     onclick={(event) => event.stopPropagation()}
   >
     <header>
-      <span class="eyebrow">Procedures</span>
-      <button class="close" onclick={close} disabled={running !== null} aria-label="Close">×</button>
+      <span class="eyebrow">{ui("plugins.title")}</span>
+      <button class="close" onclick={close} disabled={running !== null} aria-label={ui("plugins.close")}>×</button>
     </header>
 
     {#if app.plugins.length === 0}
       <p class="hint">
-        No procedures are bundled. Run <code>pnpm plugins:build</code> to compile them.
+        {@html ui("plugins.none", { command: "pnpm plugins:build" })}
       </p>
     {:else}
       <p class="hint">
-        Ported from DDT4All's plugins. Each names the ECU it was written for and is
-        attached to that module for the duration, whatever the catalogue has selected.
+        {ui("plugins.hint")}
       </p>
 
       {#each groups as [category, members] (category)}
@@ -75,8 +75,8 @@
               <div class="what">
                 <span class="label">
                   {plugin.label}
-                  {#if busless}<span class="tag calm">no vehicle needed</span>{/if}
-                  {#if !busless}<span class="tag">unverified</span>{/if}
+                  {#if busless}<span class="tag calm">{ui("plugins.noVehicleNeeded")}</span>{/if}
+                  {#if !busless}<span class="tag">{ui("plugins.unverified")}</span>{/if}
                 </span>
                 <p class="desc">{plugin.description}</p>
                 {#if plugin.warning}
@@ -88,7 +88,7 @@
                 disabled={running !== null}
                 onclick={() => void runPluginByName(plugin.name)}
               >
-                {running === plugin.name ? "Running…" : "Run"}
+                {running === plugin.name ? ui("plugins.running") : ui("plugins.run")}
               </button>
             </div>
           {/each}
@@ -98,7 +98,7 @@
 
     {#if app.pluginLog.length > 0 || outcome !== null}
       <div class="output">
-        <span class="eyebrow">Output</span>
+        <span class="eyebrow">{ui("plugins.output")}</span>
         <ol>
           {#each app.pluginLog as line, i (i)}
             <li>{line}</li>
@@ -169,7 +169,8 @@
     color: var(--ink-soft);
   }
 
-  code {
+  /* Same as About: the element comes from `@html`, so scoping cannot reach it. */
+  .hint :global(code) {
     padding: 1px 4px;
     background: var(--paper);
   }

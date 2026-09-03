@@ -34,11 +34,13 @@
     inputValue,
     isEdited,
     pressButton,
+    refusalMessage,
     revertInput,
     setInputValue,
     t,
     untranslated,
   } from "../lib/state.svelte.js";
+  import { ui } from "../lib/ui.svelte.js";
 
   interface Props {
     screen: PreparedScreen;
@@ -235,7 +237,7 @@
           title={button.send.length === 0
             ? "No request attached"
             : !gate.allowed
-              ? (gate.reason ?? "Not allowed")
+              ? refusalMessage(gate)
               : button.send.map((s) => s.RequestName).join("\n")}
           onclick={() => void pressButton(button.uniquename)}
         >
@@ -246,12 +248,18 @@
   </div>
 
   <figcaption>
-    <span class="eyebrow">Canvas</span>
-    <span class="hex">{screen.width} × {screen.height} twips</span>
+    <span class="eyebrow">{ui("canvas.label")}</span>
+    <span class="hex">{ui("canvas.twips", { width: screen.width, height: screen.height })}</span>
     <span class="sep">·</span>
     <span class="hex">{Math.round((DEFAULT_UI_SCALE / scale) * 100)}% · 1 : {scale.toFixed(2)}</span>
     <span class="sep">·</span>
-    <span>{screen.widgets.length} bound, {screen.labels.length} captions, {screen.buttons.length} actions</span>
+    <span>
+      {ui("canvas.parts", {
+        widgets: screen.widgets.length,
+        labels: screen.labels.length,
+        buttons: screen.buttons.length,
+      })}
+    </span>
   </figcaption>
 </figure>
 

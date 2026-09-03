@@ -11,6 +11,7 @@
 <script lang="ts">
   import type { DtcField } from "@ddtx/session";
   import { app, clearFaults, isLive, readFaults, t } from "../lib/state.svelte.js";
+  import { ui } from "../lib/ui.svelte.js";
 
   const supported = $derived(app.dtcRequest !== null);
   const live = $derived(app.linkKind === "elm" && isLive());
@@ -51,20 +52,22 @@
 {#if supported}
   <section class="faults">
     <header>
-      <span class="eyebrow">Fault codes</span>
+      <span class="eyebrow">{ui("faults.title")}</span>
       <button class="go" disabled={app.dtcReading} onclick={() => void readFaults()}>
-        {app.dtcReading ? "Reading…" : result === null ? "Read faults" : "Re-read"}
+        {app.dtcReading
+          ? ui("faults.reading")
+          : result === null
+            ? ui("faults.read")
+            : ui("faults.reread")}
       </button>
       {#if result !== null && result.records.length > 0}
         <button
           class="erase"
           disabled={app.dtcClearing || !canClear}
-          title={canClear
-            ? "Erase every stored code"
-            : "Enable writes first — this cannot be undone"}
+          title={canClear ? ui("faults.eraseTitle") : ui("faults.eraseBlocked")}
           onclick={() => void clearFaults()}
         >
-          {app.dtcClearing ? "Erasing…" : "Erase"}
+          {app.dtcClearing ? ui("faults.erasing") : ui("faults.erase")}
         </button>
       {/if}
     </header>
@@ -78,21 +81,26 @@
 
     {#if result === null}
       <p class="hint">
-        Asks {app.selected?.ecuname} for the codes it has stored.
-        {#if !live}Simulated — no vehicle attached.{/if}
+        {ui("faults.asks", { ecu: app.selected?.ecuname ?? "" })}
+        {#if !live}{ui("faults.simulated")}{/if}
       </p>
     {:else if result.outcome === "none"}
-      <p class="hint clean">No stored codes.</p>
+      <p class="hint clean">{ui("faults.none")}</p>
     {:else if result.outcome === "rejected"}
-      <p class="notice">The ECU refused the request. {result.raw ?? ""}</p>
+      <p class="notice">{ui("faults.refused")} {result.raw ?? ""}</p>
     {:else if result.outcome === "unreadable"}
-      <p class="notice">Answered, but not as a fault response: <code>{result.raw ?? ""}</code></p>
+      <p class="notice">
+        {ui("faults.unreadable")} <code>{result.raw ?? ""}</code>
+      </p>
     {:else}
       <p class="hint">
-        <strong>{result.declared}</strong> declared,
-        <strong>{result.records.length}</strong> read via {result.requestName}
+        {ui("faults.declared", { count: result.declared })},
+        {ui("faults.readVia", {
+          count: result.records.length,
+          request: result.requestName ?? "",
+        })}
         {#if result.declared !== result.records.length}
-          <span class="partial">— the response did not carry them all</span>
+          <span class="partial">{ui("faults.partial")}</span>
         {/if}
       </p>
       <ol>
@@ -122,7 +130,7 @@
                       {#if field.source === "devices"}
                         <!-- Named from the ECU's DTC catalogue rather than the field's
                              own enum. Same file, different table. -->
-                        <span class="from" title="Named from this ECU's DTC catalogue">cat</span>
+                        <span class="from" title={ui("faults.fromCatalogueTitle")}>{ui("faults.fromCatalogue")}</span>
                       {/if}
                     {:else}
                       <!--
@@ -132,8 +140,8 @@
                         generated, so almost nothing resolves.
                       -->
                       <span class="unnamed">{field.value}</span>
-                      <span class="from muted" title="Neither this field's enum nor the ECU's DTC catalogue names this value">
-                        unnamed
+                      <span class="from muted" title={ui("faults.unnamedTitle")}>
+                        {ui("faults.unnamed")}
                       </span>
                     {/if}
                     <span class="raw hex">{field.hex}</span>

@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
   import type { Facet } from "../lib/state.svelte.js";
+  import { ui } from "../lib/ui.svelte.js";
 
   interface Props {
     vehicles: Facet[];
@@ -25,7 +26,7 @@
 
   const { vehicles, value, onselect }: Props = $props();
 
-  const ANY = { value: "", label: "Any vehicle", count: 0 };
+  const ANY = $derived({ value: "", label: ui("vehicle.any"), count: 0 });
 
   let open = $state(false);
   let query = $state("");
@@ -90,7 +91,7 @@
 </script>
 
 <div class="picker">
-  <span class="eyebrow" id="vehicle-label">Vehicle</span>
+  <span class="eyebrow" id="vehicle-label">{ui("vehicle.label")}</span>
   <div class="field">
     <input
       bind:this={input}
@@ -116,14 +117,14 @@
       <!-- Clearing is one click, not "scroll back to the top of the list". -->
       <button
         class="clear"
-        title="Show all vehicles"
+        title={ui("vehicle.showAll")}
         onpointerdown={(event) => {
           event.preventDefault();
           choose("");
         }}
       >
         <span aria-hidden="true">×</span>
-        <span class="sr">Show all vehicles</span>
+        <span class="sr">{ui("vehicle.showAll")}</span>
       </button>
     {/if}
   </div>
@@ -131,7 +132,7 @@
   {#if open}
     <ul class="list" id="vehicle-list" role="listbox" aria-labelledby="vehicle-label">
       {#if matches.length === 0}
-        <li class="none">No vehicle matches “{query}”.</li>
+        <li class="none">{ui("vehicle.noMatch", { query })}</li>
       {/if}
       {#each matches as match, i (match.value)}
         <li>

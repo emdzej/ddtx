@@ -9,6 +9,7 @@
 <script lang="ts">
   import type { ScreenSnapshot } from "@ddtx/screens";
   import { app, setTraceOpen, t } from "../lib/state.svelte.js";
+  import { ui } from "../lib/ui.svelte.js";
   import type { Exchange } from "@ddtx/screens";
 
   interface Props {
@@ -39,11 +40,14 @@
     aria-expanded={app.traceOpen}
   >
     <span class="caret" aria-hidden="true">{app.traceOpen ? "▾" : "▸"}</span>
-    <span class="eyebrow">Bus trace</span>
+    <span class="eyebrow">{ui("trace.title")}</span>
     {#if snapshot !== null}
       <span class="hex">
-        {rows.length} exchanges · {snapshot.elapsedMs} ms
-        {#if app.actionExchanges.length > 0}· incl. {app.actionLabel}{/if}
+        {ui("trace.exchanges", { count: rows.length, ms: snapshot.elapsedMs })}
+        {#if app.actionExchanges.length > 0 && app.actionLabel !== null}{ui(
+            "trace.including",
+            { label: app.actionLabel },
+          )}{/if}
       </span>
     {/if}
   </button>
@@ -51,7 +55,7 @@
   {#if !app.traceOpen}
     <!-- nothing: the header alone is the closed state -->
   {:else if snapshot === null}
-    <p class="empty">Open a screen to see its requests.</p>
+    <p class="empty">{ui("trace.empty")}</p>
   {:else}
     <ol>
       {#each rows as row, i (i)}
@@ -62,7 +66,7 @@
           class:action={row.fromAction}
         >
           <span class="name" title={exchange.requestName}>
-            {#if row.fromAction}<span class="tag">sent</span>{/if}{t(
+            {#if row.fromAction}<span class="tag">{ui("trace.sent")}</span>{/if}{t(
               "request",
               exchange.requestName,
             )}

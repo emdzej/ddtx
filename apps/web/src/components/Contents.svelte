@@ -10,6 +10,7 @@
   import Faults from "./Faults.svelte";
   import Scan from "./Scan.svelte";
   import { app, openScreen, t, untranslated } from "../lib/state.svelte.js";
+  import { ui } from "../lib/ui.svelte.js";
 
   /** Models this ECU is fitted to, named rather than coded. */
   const vehicles = $derived(
@@ -28,27 +29,27 @@
   {/if}
 
   {#if app.selected === null}
-    <p class="empty">Pick an ECU to see its screens.</p>
+    <p class="empty">{ui("contents.pickEcu")}</p>
   {:else}
     <header>
       <span class="eyebrow">{app.selected.group}</span>
       <h2>{app.selected.ecuname}</h2>
       <dl>
-        <div><dt class="eyebrow">Addr</dt><dd class="hex">{app.selected.address}</dd></div>
-        <div><dt class="eyebrow">Bus</dt><dd>{app.selected.protocol || "unset"}</dd></div>
+        <div><dt class="eyebrow">{ui("contents.addr")}</dt><dd class="hex">{app.selected.address}</dd></div>
+        <div><dt class="eyebrow">{ui("contents.bus")}</dt><dd>{app.selected.protocol || ui("cat.busUnset")}</dd></div>
         {#if app.ecuPhase === "ready"}
-          <div><dt class="eyebrow">Requests</dt><dd class="hex">{app.requestCount}</dd></div>
-          <div><dt class="eyebrow">Values</dt><dd class="hex">{app.dataCount}</dd></div>
+          <div><dt class="eyebrow">{ui("contents.requests")}</dt><dd class="hex">{app.requestCount}</dd></div>
+          <div><dt class="eyebrow">{ui("contents.values")}</dt><dd class="hex">{app.dataCount}</dd></div>
           {#if app.testerPresent !== null}
             <div>
-              <dt class="eyebrow">Keepalive</dt>
+              <dt class="eyebrow">{ui("contents.keepalive")}</dt>
               <dd class="hex">{app.testerPresent}</dd>
             </div>
           {/if}
         {:else}
           <!-- A count of 0 would be a claim, not a placeholder. -->
-          <div><dt class="eyebrow">Requests</dt><dd class="pending">—</dd></div>
-          <div><dt class="eyebrow">Values</dt><dd class="pending">—</dd></div>
+          <div><dt class="eyebrow">{ui("contents.requests")}</dt><dd class="pending">—</dd></div>
+          <div><dt class="eyebrow">{ui("contents.values")}</dt><dd class="pending">—</dd></div>
         {/if}
       </dl>
       {#if vehicles !== ""}
@@ -57,14 +58,13 @@
 
       {#if app.layoutWarnings > 0}
         <p class="warn">
-          {app.layoutWarnings} reference{app.layoutWarnings === 1 ? "" : "s"} in this ECU's screens
-          don't resolve and were left out.
+          {ui("contents.layoutWarnings", { count: app.layoutWarnings })}
         </p>
       {/if}
     </header>
 
     {#if app.ecuPhase === "loading"}
-      <p class="empty">Loading definitions…</p>
+      <p class="empty">{ui("contents.loading")}</p>
     {:else}
       <!-- Between the ECU's identity and its screens: what's wrong comes before
            what you can look at. -->

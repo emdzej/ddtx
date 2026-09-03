@@ -87,6 +87,9 @@ importers:
       '@lucide/svelte':
         specifier: ^1.39.0
         version: 1.39.0(svelte@5.56.9)
+      i18next:
+        specifier: ^26.4.1
+        version: 26.4.1(typescript@5.9.3)
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^5.0.0
@@ -1038,6 +1041,14 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
+  i18next@26.4.1:
+    resolution: {integrity: sha512-9YbX5E6gd1H+yaOSX3izCsPj5iWXyH7X4oC+iuHHJJw8AeHglzOK5SJf+1CHxaYKYigcea+8jvzSxqYx46YvyA==}
+    peerDependencies:
+      typescript: ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   is-reference@3.0.3:
     resolution: {integrity: sha512-ixkJoqQvAP88E6wLydLGGqCJsrFUnqoH6HnaczB8XmDH1oaWU+xxdptvikTgaEhtZ53Ky6YXiBuUI2WXLMCwjw==}
 
@@ -1824,6 +1835,10 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  i18next@26.4.1(typescript@5.9.3):
+    optionalDependencies:
+      typescript: 5.9.3
 
   is-reference@3.0.3:
     dependencies:

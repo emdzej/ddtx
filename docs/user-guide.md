@@ -186,15 +186,36 @@ calculator is arithmetic and safe to use.
 
 ## 8. Language
 
-The database is authored in French, and its French strings are also its internal keys,
-so translation is an overlay rather than a rewrite. **View ▾ → Language**:
+There are **two** language settings under **View ▾**, because they are two different
+things.
+
+**Interface** is ddtx's own buttons and dialogs. It follows your browser's language by
+default — a Polish browser opens in Polish — and you can override it. English and
+Polish are complete; the setting remembers *"match my browser"* as a preference, so if
+you change your browser language later, ddtx follows.
+
+**Database** is the ECU definitions, which are a different problem: they are authored in
+French, and their French strings double as the database's internal keys, so translation
+is an overlay rather than a rewrite.
 
 - **Original — as authored** — French, exactly as the database has it.
 - **English** — the overlay, where it has an entry.
 
-Coverage is partial and uneven by module. **Mark untranslated gaps** shows you exactly
-where it runs out, so a half-translated screen is obvious rather than misleading.
-Never assume a missing translation means a missing value.
+Coverage there is partial and uneven by module, and it will not gain a Polish
+translation — the database is 541,061 requests. **Mark untranslated gaps** shows you
+where it runs out, so a half-translated screen is obvious rather than misleading. Never
+assume a missing translation means a missing value.
+
+So Polish buttons over a French database is the normal state, not a broken one. Screen
+names, categories, measurement labels and fault names all come from the database and
+follow the *Database* setting, never the interface one.
+
+### Adding a language
+
+Copy `apps/web/src/i18n/locales/en.json`, translate the values, and register the tag in
+`UI_LOCALES`. Two things the tests will hold you to: every key English has, and every
+plural form your language uses — `Intl.PluralRules` decides how many that is, and it is
+four for Polish where English has two.
 
 ## 9. When something looks wrong
 

@@ -47,13 +47,25 @@ const executablePath = findChromium();
 const runnable = url !== undefined && executablePath !== undefined;
 
 describe.skipIf(!runnable)("the top strip", () => {
-  it("fits on one row down to 860px, and keeps its settings behind popovers", async () => {
+  it("fits on one row down to 860px in every language, settings behind popovers", async () => {
+    // Every language, because the budget is about pixels and translations are not the
+    // same width. Polish needed 49px more than English and overflowed 860px by 10 —
+    // the strip still looked fine, the whole document just scrolled sideways. Asserting
+    // this in English only would have shipped that.
     const { chromium } = await import("playwright-core");
     const browser = await chromium.launch({ executablePath });
     try {
-      for (const width of [1440, 1024, 860]) {
+      for (const [width, language] of [
+        [1440, "en"],
+        [1024, "en"],
+        [860, "en"],
+        [1024, "pl"],
+        [860, "pl"],
+      ] as [number, string][]) {
         const page = await browser.newPage({ viewport: { width, height: 700 } });
-        await page.goto(url as string, { waitUntil: "networkidle" });
+        await page.goto(url as string, { waitUntil: "domcontentloaded" });
+        await page.evaluate((lng) => localStorage.setItem("ddtx.uiLocale", lng), language);
+        await page.reload({ waitUntil: "networkidle" });
         await page.waitForTimeout(600);
 
         const strip = await page.evaluate(() => {
@@ -68,12 +80,21 @@ describe.skipIf(!runnable)("the top strip", () => {
           };
         });
 
-        expect(strip, `strip missing at ${width}px`).not.toBeNull();
+        const where = `${language} at ${width}px`;
+        expect(strip, `strip missing, ${where}`).not.toBeNull();
         // One row. Two rows means it wrapped, which is the failure this guards.
-        expect(strip?.height, `strip wrapped at ${width}px`).toBeLessThan(40);
-        expect(strip?.overflow, `strip overflows at ${width}px`).toBeLessThanOrEqual(0);
+        expect(strip?.height, `strip wrapped, ${where}`).toBeLessThan(40);
+        expect(strip?.overflow, `strip overflows, ${where}`).toBeLessThanOrEqual(0);
+        // The page must not scroll sideways either — that is how the Polish overflow
+        // showed up: the strip pushed `.app` wider than the viewport.
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          ),
+          `the document scrolls sideways, ${where}`,
+        ).toBeLessThanOrEqual(0);
         // Language and zoom belong in the View panel, not inline.
-        expect(strip?.selects, `a select crept back inline at ${width}px`).toBe(0);
+        expect(strip?.selects, `a select crept back inline, ${where}`).toBe(0);
 
         await page.close();
       }

@@ -20,6 +20,7 @@
   } from "../lib/state.svelte.js";
   import { DEV_DB_URL } from "../lib/dbInstall.js";
   import { folderPickerSupported } from "../lib/installStorage.js";
+  import { ui } from "../lib/ui.svelte.js";
 
   let remoteUrl = $state(DEV_DB_URL);
   let confirmingRemoval = $state(false);
@@ -30,11 +31,11 @@
   /** Nothing to replace or remove until something is actually installed. */
   const haveTree = $derived(app.installed !== null);
 
-  const SOURCE_LABEL: Record<string, string> = {
-    opfs: "Unpacked in this browser",
-    folder: "A folder on this machine",
-    remote: "Served over HTTP",
-  };
+  const SOURCE_LABEL = $derived<Record<string, string>>({
+    opfs: ui("settings.sourceOpfs"),
+    folder: ui("settings.sourceFolder"),
+    remote: ui("settings.sourceRemote"),
+  });
 
   function fmtBytes(n: number): string {
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
@@ -63,59 +64,62 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="scrim" role="presentation" onclick={close}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="dialog" role="dialog" aria-modal="true" tabindex="-1" aria-label="Database settings" onclick={(e) => e.stopPropagation()}>
+  <div class="dialog" role="dialog" aria-modal="true" tabindex="-1" aria-label={ui("strip.databaseTitle")} onclick={(e) => e.stopPropagation()}>
     <header>
-      <span class="eyebrow">Database</span>
-      <button class="close" onclick={close} aria-label="Close">×</button>
+      <span class="eyebrow">{ui("settings.title")}</span>
+      <button class="close" onclick={close} aria-label={ui("settings.close")}>×</button>
     </header>
 
     <dl class="facts">
       <div>
-        <dt>Source</dt>
-        <dd>{source === null ? "none" : SOURCE_LABEL[source.kind]}</dd>
+        <dt>{ui("settings.source")}</dt>
+        <dd>{source === null ? ui("settings.sourceNone") : SOURCE_LABEL[source.kind]}</dd>
       </div>
       <div>
-        <dt>Location</dt>
+        <dt>{ui("settings.location")}</dt>
         <dd class="mono">{source?.label ?? "—"}</dd>
       </div>
       <div>
-        <dt>ECUs</dt>
+        <dt>{ui("settings.ecus")}</dt>
         <dd class="hex">{app.ecuCount}</dd>
       </div>
       {#if app.installed !== null}
         <div>
-          <dt>Archive</dt>
+          <dt>{ui("settings.archive")}</dt>
           <dd class="mono">{app.installed.source.name}</dd>
         </div>
         <div>
-          <dt>Unpacked</dt>
+          <dt>{ui("settings.unpacked")}</dt>
           <dd>
             {fmtBytes(Object.values(app.installed.bytes).reduce((a, b) => a + b, 0))}
           </dd>
         </div>
         <div>
-          <dt title="SHA-256 of the archive. Re-importing the same one is skipped.">
-            Snapshot
-          </dt>
+          <dt title={ui("settings.snapshotTitle")}>{ui("settings.snapshot")}</dt>
           <dd class="mono">{app.installed.source.sha256.slice(0, 12)}</dd>
         </div>
       {/if}
       {#if app.storage !== null && app.storage.quota > 0}
         <div>
-          <dt>Browser storage</dt>
+          <dt>{ui("settings.storage")}</dt>
           <dd>
-            {fmtBytes(app.storage.usage)} of {fmtBytes(app.storage.quota)} used
+            {ui("settings.storageUsed", {
+              used: fmtBytes(app.storage.usage),
+              total: fmtBytes(app.storage.quota),
+            })}
           </dd>
         </div>
       {/if}
     </dl>
 
     {#if app.importProgress?.phase === "hashing"}
-      <p class="hint">Checking the archive against what is already installed…</p>
+      <p class="hint">{ui("settings.hashing")}</p>
     {:else if app.importProgress !== null}
       <p class="hint unpacking">
-        Unpacking — <span class="hex">{app.importProgress.done}</span> of
-        <span class="hex">{app.importProgress.total}</span> entries.
+        {ui("settings.unpacking", {
+          done: app.importProgress.done,
+          total: app.importProgress.total,
+        })}
       </p>
     {/if}
     {#if app.importError !== null}
@@ -130,7 +134,11 @@
       <ul class="findings">
         {#each app.dbFindings as finding, i (i)}
           <li class:warn={finding.severity === "warning"}>
-            <span class="tag">{finding.severity === "warning" ? "check" : "problem"}</span>
+            <span class="tag">
+              {finding.severity === "warning"
+                ? ui("settings.findingWarn")
+                : ui("settings.findingError")}
+            </span>
             {finding.message}
           </li>
         {/each}
@@ -140,64 +148,55 @@
     <div class="actions">
       <div class="row">
         <div>
-          <h2>{haveTree ? "Replace with another archive" : "Install from an archive"}</h2>
-          <p>
-            Unpacks into this browser. The same archive is recognised and skipped rather
-            than rewritten.
-          </p>
+          <h2>{haveTree ? ui("settings.replaceHead") : ui("settings.installHead")}</h2>
+          <p>{ui("settings.installBody")}</p>
         </div>
-        <button onclick={() => fileInput?.click()} disabled={importing}>Choose ecu.zip</button>
+        <button onclick={() => fileInput?.click()} disabled={importing}>{ui("settings.chooseZip")}</button>
         <input bind:this={fileInput} type="file" accept=".zip,application/zip" onchange={onPick} hidden />
       </div>
 
       <div class="row">
         <div>
-          <h2>Check the installed database</h2>
-          <p>
-            Reads the index and samples a dozen ECUs, reporting anything missing or
-            malformed. The same check runs when a database is installed.
-          </p>
+          <h2>{ui("settings.verifyHead")}</h2>
+          <p>{ui("settings.verifyBody")}</p>
         </div>
         <button onclick={() => void verifyDatabase()} disabled={app.verifying || importing}>
-          {app.verifying ? "Checking…" : "Verify"}
+          {app.verifying ? ui("settings.verifying") : ui("settings.verify")}
         </button>
       </div>
 
       <div class="row">
         <div>
-          <h2>Read a folder instead</h2>
-          <p>An already-split tree. Asks for permission again on every reload.</p>
+          <h2>{ui("settings.folderHead")}</h2>
+          <p>{ui("settings.folderBody")}</p>
         </div>
         <button onclick={() => void chooseFolder()} disabled={!folderPickerSupported() || importing}>
-          Choose folder
+          {ui("settings.chooseFolder")}
         </button>
       </div>
 
       <div class="row">
         <div>
-          <h2>Read a URL instead</h2>
+          <h2>{ui("settings.urlHead")}</h2>
           <input class="url" bind:value={remoteUrl} spellcheck="false" />
         </div>
-        <button onclick={() => void chooseRemote(remoteUrl)} disabled={importing}>Use URL</button>
+        <button onclick={() => void chooseRemote(remoteUrl)} disabled={importing}>{ui("settings.useUrl")}</button>
       </div>
     </div>
 
     {#if haveTree}
     <div class="danger">
       {#if confirmingRemoval}
-        <p>
-          This deletes the unpacked tree from this browser and forgets the remembered
-          folder. You will need the archive again to get back.
-        </p>
+        <p>{ui("settings.removeConfirm")}</p>
         <div class="confirm">
           <button class="destructive" onclick={() => void forgetDatabase()}>
-            Delete the database
+            {ui("settings.delete")}
           </button>
-          <button onclick={() => (confirmingRemoval = false)}>Keep it</button>
+          <button onclick={() => (confirmingRemoval = false)}>{ui("settings.keep")}</button>
         </div>
       {:else}
         <button class="destructive" onclick={() => (confirmingRemoval = true)}>
-          Remove the database
+          {ui("settings.remove")}
         </button>
       {/if}
     </div>

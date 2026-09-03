@@ -11,6 +11,7 @@
 -->
 <script lang="ts">
   import { setAboutOpen } from "../lib/state.svelte.js";
+  import { ui } from "../lib/ui.svelte.js";
 
   const GUIDE_URL = `${__REPO_URL__}/blob/main/docs/user-guide.md`;
 
@@ -33,12 +34,12 @@
     role="dialog"
     aria-modal="true"
     tabindex="-1"
-    aria-label="About ddtx"
+    aria-label={ui("strip.about")}
     onclick={(e) => e.stopPropagation()}
   >
     <header>
-      <span class="eyebrow">About</span>
-      <button class="close" onclick={close} aria-label="Close">×</button>
+      <span class="eyebrow">{ui("about.eyebrow")}</span>
+      <button class="close" onclick={close} aria-label={ui("about.close")}>×</button>
     </header>
 
     <div class="body">
@@ -47,54 +48,43 @@
         <span class="ver hex">{__APP_VERSION__}</span>
       </p>
 
-      <p>
-        Diagnostics for Renault, Dacia and Nissan control units, running entirely in
-        this browser. It reads and writes ECUs over an ELM327-family adapter on Web
-        Serial — identification, live measurements, stored fault codes and service
-        procedures — from a database of 1,580 module definitions.
-      </p>
+      <p>{ui("about.what")}</p>
 
-      <p>
-        Nothing is uploaded. The database lives in this browser's own storage and the
-        adapter talks straight to the page, so the vehicle's data never leaves the
-        machine it is plugged into.
-      </p>
+      <p>{ui("about.privacy")}</p>
 
+      <!--
+        The link is a value in the sentence rather than markup around a fragment of it,
+        because "a TypeScript port of X" does not put X in the same place in every
+        language. `@html` is safe here: both halves are ours.
+      -->
       <p>
-        A TypeScript port of
-        <a href="https://github.com/cedricp/ddt4all" target="_blank" rel="noopener noreferrer">
-          DDT4All
-        </a>, whose ECU database and decoding behaviour it reproduces. Licensed
-        GPL-3.0-or-later.
+        {@html
+          ui("about.port", {
+            ddt4all:
+              '<a href="https://github.com/cedricp/ddt4all" target="_blank" rel="noopener noreferrer">DDT4All</a>',
+          })}
       </p>
 
       <div class="links">
         <a class="primary" href={GUIDE_URL} target="_blank" rel="noopener noreferrer">
-          Read the user guide
+          {ui("about.guide")}
         </a>
-        <a href={__REPO_URL__} target="_blank" rel="noopener noreferrer">Source code</a>
+        <a href={__REPO_URL__} target="_blank" rel="noopener noreferrer">{ui("about.source")}</a>
         <a href={`${__REPO_URL__}/issues`} target="_blank" rel="noopener noreferrer">
-          Report a problem
+          {ui("about.report")}
         </a>
       </div>
 
       <div class="disclaimer">
-        <h2>No warranty. Use at your own risk.</h2>
-        <p>
-          This software is provided <strong>as is</strong>, without warranty of any kind,
-          express or implied. The authors and contributors accept
-          <strong>no responsibility or liability</strong> for how it is used or for any
-          consequence of using it — including damage to a vehicle or its electronics,
-          loss of stored data or configuration, a module left inoperable, cost of
-          repair, or any effect on safety systems or on the vehicle's roadworthiness.
-        </p>
-        <p>
-          Writing to a control unit can be irreversible. Nothing here has been verified
-          against a factory tool, and no procedure in this program has been confirmed on
-          a real vehicle. You are responsible for knowing what a command does before you
-          send it, for having the right to work on the vehicle, and for any legal or
-          regulatory obligations that apply where you are.
-        </p>
+        <h2>{ui("about.warrantyHead")}</h2>
+        <!--
+          `@html` for these two: the emphasis is inside the sentence, and which phrase
+          carries it is a translator's call — Polish does not put "as is" where English
+          does. Both the template and the catalogue are ours, so there is no untrusted
+          input in the path.
+        -->
+        <p>{@html ui("about.warrantyBody")}</p>
+        <p>{@html ui("about.warrantyWrites")}</p>
       </div>
     </div>
   </div>
@@ -235,7 +225,9 @@
     margin-bottom: 0;
   }
 
-  .disclaimer strong {
+  /* `:global`, because the emphasis arrives through `@html` and Svelte's scoping
+     never sees those elements to add its hash class to them. */
+  .disclaimer :global(strong) {
     font-weight: 700;
   }
 </style>

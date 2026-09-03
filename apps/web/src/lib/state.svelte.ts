@@ -12,6 +12,7 @@
  */
 
 import { projectLabel } from "@ddtx/core";
+import { ui } from "./ui.svelte.js";
 import { Overlay, type Namespace } from "@ddtx/i18n";
 import {
   EcuDatabase,
@@ -496,6 +497,26 @@ export function isLive(): boolean {
  * here — `prepareLayout`, the codec, and the link all work on the raw strings, so
  * a translated caption can never be used as a lookup key.
  */
+/**
+ * Turn a write gate's refusal into a sentence.
+ *
+ * The gate lives in `@ddtx/session`, which has no business knowing about locales, so
+ * it returns a code and the wording happens here. `reason` on the decision is still
+ * the English fallback for the CLI, which has no catalogue.
+ */
+const REFUSAL_ID = {
+  "writes-disabled": "gate.writesDisabled",
+  "not-live": "gate.notLive",
+  "not-visible": "gate.notVisible",
+  "lock-unavailable": "gate.lockUnavailable",
+  declined: "gate.declined",
+} as const;
+
+export function refusalMessage(gate: { refusal?: keyof typeof REFUSAL_ID }): string {
+  const id = gate.refusal === undefined ? undefined : REFUSAL_ID[gate.refusal];
+  return id === undefined ? ui("gate.notAllowed") : ui(id);
+}
+
 export function t(namespace: Namespace, source: string): string {
   // Registers the dependency; the value itself is not used.
   void app.overlayVersion;
@@ -657,7 +678,7 @@ export async function installArchive(file: File): Promise<void> {
       // Refused before anything was written, so say so — the installed database is
       // exactly as it was.
       app.dbFindings = cause.findings;
-      app.importError = "That archive was not used, and nothing already installed was changed.";
+      app.importError = ui("install.archiveRejected");
     } else {
       app.importError = cause instanceof Error ? cause.message : String(cause);
     }
@@ -679,7 +700,7 @@ export async function chooseFolder(): Promise<void> {
       // `pickFolder` verifies before remembering, so a wrong folder never becomes the
       // saved source and the findings say which folder to pick instead.
       app.dbFindings = cause.findings;
-      app.importError = "That folder was not used.";
+      app.importError = ui("install.folderRejected");
     } else {
       app.importError = cause instanceof Error ? cause.message : String(cause);
     }
@@ -701,8 +722,10 @@ export async function verifyDatabase(): Promise<void> {
     const report = await verifySource(dbSourceRef);
     app.dbFindings = report.findings;
     app.dbVerified = report.ok
-      ? `Checked: index plus ${report.sampled?.checked ?? 0} sampled ECUs, ` +
-        `${report.indexed ?? 0} declared. No problems found.`
+      ? ui("settings.verifyOk", {
+          sampled: report.sampled?.checked ?? 0,
+          indexed: report.indexed ?? 0,
+        })
       : null;
   } catch (cause) {
     app.importError = cause instanceof Error ? cause.message : String(cause);
@@ -716,7 +739,7 @@ export async function continueWithFolder(): Promise<void> {
   if (pendingFolder === null) return;
   const resolved = await grantFolder(pendingFolder);
   if (resolved === null) {
-    app.importError = "Permission was not granted, so that folder cannot be read.";
+    app.importError = ui("install.noPermission");
     return;
   }
   await useSource(resolved);
@@ -729,9 +752,9 @@ export async function chooseRemote(url: string): Promise<void> {
   try {
     await useSource(useRemote(url));
   } catch (cause) {
-    app.importError = `Nothing readable at that URL — ${
-      cause instanceof Error ? cause.message : String(cause)
-    }`;
+    app.importError = ui("install.urlUnreadable", {
+      detail: cause instanceof Error ? cause.message : String(cause),
+    });
   }
 }
 
@@ -765,7 +788,7 @@ export async function runPluginByName(name: string): Promise<void> {
   if (manifest.ecu !== undefined && database === null) {
     app.pluginOutcome = {
       status: "aborted",
-      text: `This procedure needs the ${manifest.ecu} definitions, and no database is installed.`,
+      text: ui("plugins.needsDatabase", { ecu: manifest.ecu }),
     };
     app.pluginsOpen = true;
     return;
@@ -787,7 +810,7 @@ export async function runPluginByName(name: string): Promise<void> {
     if (manifest.ecu !== undefined && database !== null) {
       pluginEcu = await database.loadEcu(manifest.ecu);
       if (driver !== null) {
-        app.pluginLog = [...app.pluginLog, `Attaching to ${pluginEcu.def.ecuname}…`];
+        app.pluginLog = [...app.pluginLog, ui("plugins.attaching", { ecu: pluginEcu.def.ecuname })];
         await attachEcu(driver, pluginEcu);
         link = new ElmLink(driver);
       } else {
@@ -834,7 +857,7 @@ export async function runPluginByName(name: string): Promise<void> {
     if (!outcome.ran) {
       app.pluginOutcome = {
         status: "aborted",
-        text: "Another ddtx tab is using this adapter.",
+        text: ui("plugins.adapterBusy"),
       };
     } else if (outcome.value !== undefined) {
       app.pluginOutcome = { status: outcome.value.status, text: outcome.value.text };
@@ -1002,12 +1025,12 @@ export async function connect(): Promise<void> {
   ).serial;
   if (serial === undefined) {
     app.connection = "error";
-    app.connectionMessage = "This browser has no Web Serial. Use Chrome or Edge on desktop.";
+    app.connectionMessage = ui("link.noSerial");
     return;
   }
 
   app.connection = "connecting";
-  app.connectionMessage = "Choosing a port…";
+  app.connectionMessage = ui("link.choosingPort");
   app.lastRefusal = null;
 
   let port: WebSerialPortLike;
@@ -1016,12 +1039,12 @@ export async function connect(): Promise<void> {
   } catch {
     // The operator dismissed the picker; that is not an error worth shouting.
     app.connection = "idle";
-    app.connectionMessage = "Not connected";
+    app.connectionMessage = ui("link.notConnected");
     return;
   }
 
   for (const baudRate of CANDIDATE_BAUD_RATES) {
-    app.connectionMessage = `Trying ${baudRate} baud…`;
+    app.connectionMessage = ui("link.trying", { baud: baudRate });
     const candidate = new WebSerialTransport(port, { baudRate }, `Web Serial @ ${baudRate}`);
     try {
       await candidate.open();
@@ -1039,7 +1062,11 @@ export async function connect(): Promise<void> {
       app.adapter = info;
       app.linkKind = "elm";
       app.connection = "connected";
-      app.connectionMessage = `${info.version} at ${baudRate} baud · ${candidateDriver.canStrategy}`;
+      app.connectionMessage = ui("link.attached", {
+        version: info.version,
+        baud: baudRate,
+        strategy: candidateDriver.canStrategy,
+      });
       // Re-open the current screen through the real link.
       await reopenCurrentScreen();
       return;
@@ -1050,7 +1077,7 @@ export async function connect(): Promise<void> {
   }
 
   app.connection = "error";
-  app.connectionMessage = "No ELM327 answered on that port at any baud rate.";
+  app.connectionMessage = ui("link.noAnswer");
 }
 
 /**
@@ -1067,7 +1094,7 @@ export async function benchLink(iterations = 200): Promise<void> {
   if (active === null || app.benching) return;
 
   app.benching = true;
-  app.linkBench = "Measuring…";
+  app.linkBench = ui("strip.measuring");
   try {
     // Discard a warm-up: the first exchange after an idle period is routinely an
     // outlier and would dominate the max.
@@ -1131,9 +1158,11 @@ export async function startScan(): Promise<void> {
         }
       },
     });
-    app.scanSummary =
-      `${report.found.length} of ${report.addressesProbed} addresses answered in ` +
-      `${(report.elapsedMs / 1000).toFixed(1)} s${report.cancelled ? " (stopped)" : ""}`;
+    app.scanSummary = ui(report.cancelled ? "scan.summaryStopped" : "scan.summary", {
+      found: report.found.length,
+      probed: report.addressesProbed,
+      seconds: (report.elapsedMs / 1000).toFixed(1),
+    });
   } catch (cause) {
     app.scanSummary = cause instanceof Error ? cause.message : String(cause);
   } finally {
@@ -1187,7 +1216,7 @@ export async function readFaults(): Promise<void> {
   try {
     const outcome = await withAdapterLock(() => readDtcs(link, ecu as LoadedEcu));
     if (!outcome.ran) {
-      app.dtcNotice = "Another ddtx tab is using this adapter.";
+      app.dtcNotice = ui("faults.adapterBusy");
       return;
     }
     app.dtc = outcome.value ?? null;
@@ -1213,18 +1242,17 @@ export async function clearFaults(): Promise<void> {
   if (live) {
     const gate = checkWriteGates({ writesEnabled: app.writesEnabled, live: true });
     if (!gate.allowed) {
-      app.lastRefusal = gate.reason ?? "Not allowed.";
+      app.lastRefusal = refusalMessage(gate);
       return;
     }
     const named = dtcClearRequestName(ecu);
-    const how = named ?? "the generic 14 FF 00 request";
+    const how = named ?? ui("faults.genericRequest");
     if (
       !globalThis.confirm(
-        `Erase every stored fault code in ${ecu.def.ecuname} using ${how}?\n\n` +
-          "This cannot be undone, and it destroys the record of what went wrong.",
+        ui("faults.eraseConfirm", { ecu: ecu.def.ecuname, how }),
       )
     ) {
-      app.lastRefusal = "Cancelled.";
+      app.lastRefusal = ui("gate.declined");
       return;
     }
   }
@@ -1234,14 +1262,16 @@ export async function clearFaults(): Promise<void> {
   try {
     const outcome = await withAdapterLock(() => clearDtcs(link, ecu as LoadedEcu));
     if (!outcome.ran) {
-      app.dtcClearNotice = "Another ddtx tab is using this adapter.";
+      app.dtcClearNotice = ui("faults.adapterBusy");
       return;
     }
     const result = outcome.value;
     if (result === undefined) return;
     app.dtcClearNotice = result.cleared
-      ? `Cleared with ${result.frame}${result.usedFallback ? " (generic request)" : ""}.`
-      : `Not cleared: ${result.detail ?? "no answer"}.`;
+      ? ui(result.usedFallback ? "faults.clearedGeneric" : "faults.cleared", {
+          frame: result.frame,
+        })
+      : ui("faults.notCleared", { detail: result.detail ?? ui("faults.noAnswer") });
     app.lastRefusal = null;
     // Re-read, because "cleared" is a claim until the ECU answers with nothing.
     if (result.cleared) await readFaults();
@@ -1269,7 +1299,7 @@ export async function disconnect(): Promise<void> {
   app.adapter = null;
   app.attachment = null;
   app.connection = "idle";
-  app.connectionMessage = "Not connected";
+  app.connectionMessage = ui("link.notConnected");
   app.linkBench = null;
   app.scanFound = [];
   app.scanSummary = null;
@@ -1302,7 +1332,7 @@ export async function openScreen(name: string): Promise<void> {
   if (driver !== null) {
     if (!isReachable(ecu)) {
       app.attachment = null;
-      app.connectionMessage = `${ecu.def.obd.protocol} is not reachable from a browser`;
+      app.connectionMessage = ui("link.unreachable", { protocol: ecu.def.obd.protocol });
       return;
     }
     try {
@@ -1441,7 +1471,7 @@ export async function pressButton(uniquename: string): Promise<void> {
   if (live) {
     const gate = checkWriteGates({ writesEnabled: app.writesEnabled, live: true });
     if (!gate.allowed) {
-      app.lastRefusal = gate.reason ?? "Not allowed.";
+      app.lastRefusal = refusalMessage(gate);
       return;
     }
 
@@ -1451,7 +1481,7 @@ export async function pressButton(uniquename: string): Promise<void> {
       button.send.map((entry) => entry.RequestName),
     );
     if (!globalThis.confirm(prompt)) {
-      app.lastRefusal = "Cancelled.";
+      app.lastRefusal = ui("gate.declined");
       return;
     }
 
@@ -1459,13 +1489,12 @@ export async function pressButton(uniquename: string): Promise<void> {
       runtime?.pressButton(button, inputValuesFrom(app.edits)),
     );
     if (!outcome.ran) {
-      app.lastRefusal =
-        "Another ddtx tab is using this adapter. Close it, or disconnect there first.";
+      app.lastRefusal = ui("gate.lockUnavailable");
       return;
     }
     if (outcome.value?.refused !== undefined) {
       app.badField = outcome.value.refused.field;
-      app.lastRefusal = `“${outcome.value.refused.field}” is not a value this field accepts, so nothing was sent.`;
+      app.lastRefusal = ui("gate.badField", { field: outcome.value.refused.field });
       return;
     }
     app.actionExchanges = outcome.value?.exchanges ?? [];

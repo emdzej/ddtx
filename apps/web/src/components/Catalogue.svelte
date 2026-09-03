@@ -28,6 +28,7 @@
   // Lucide (ISC), imported per icon so the rest of the pack is tree-shaken away.
   import PanelLeftClose from "@lucide/svelte/icons/panel-left-close";
   import PanelLeftOpen from "@lucide/svelte/icons/panel-left-open";
+  import { ui } from "../lib/ui.svelte.js";
 </script>
 
 {#if !app.catalogueOpen}
@@ -36,11 +37,11 @@
     <button
       class="toggle"
       onclick={() => setCatalogueOpen(true)}
-      title="Show the catalogue"
+      title={ui("cat.show")}
       aria-expanded="false"
     >
       <PanelLeftOpen size={16} strokeWidth={1.75} />
-      <span class="sr">Show the catalogue</span>
+      <span class="sr">{ui("cat.show")}</span>
     </button>
     <!--
       No address here. It used to show `app.selected.address`, which in a 40px rail is a
@@ -48,22 +49,22 @@
       the right already shows the same value under an `Addr` label. A duplicate stripped
       of the label that gave it meaning is worse than no duplicate.
     -->
-    <span class="rail-label">Catalogue</span>
+    <span class="rail-label">{ui("cat.title")}</span>
   </section>
 {:else}
 <section class="catalogue">
   <header>
-    <span class="eyebrow">Catalogue</span>
+    <span class="eyebrow">{ui("cat.title")}</span>
     <span class="header-right">
       <span class="count hex">{app.resultTotal} / {app.ecuCount}</span>
       <button
         class="toggle"
         onclick={() => setCatalogueOpen(false)}
-        title="Hide the catalogue"
+        title={ui("cat.hide")}
         aria-expanded="true"
       >
         <PanelLeftClose size={16} strokeWidth={1.75} />
-        <span class="sr">Hide the catalogue</span>
+        <span class="sr">{ui("cat.hide")}</span>
       </button>
     </span>
   </header>
@@ -73,20 +74,20 @@
 
     <div class="selects">
       <label>
-        <span class="eyebrow">Group</span>
+        <span class="eyebrow">{ui("cat.group")}</span>
         <select bind:value={app.group} onchange={applyFilters}>
-          <option value="">All {app.groups.length}</option>
+          <option value="">{ui("cat.groupAll", { count: app.groups.length })}</option>
           {#each app.groups as group (group.value)}
             <option value={group.value}>{group.label} — {group.count}</option>
           {/each}
         </select>
       </label>
       <label>
-        <span class="eyebrow">Bus</span>
+        <span class="eyebrow">{ui("cat.bus")}</span>
         <select bind:value={app.protocol} onchange={applyFilters}>
-          <option value="">Any</option>
+          <option value="">{ui("cat.busAny")}</option>
           {#each app.protocols as protocol (protocol)}
-            <option value={protocol}>{protocol || "unset"}</option>
+            <option value={protocol}>{protocol || ui("cat.busUnset")}</option>
           {/each}
         </select>
       </label>
@@ -120,10 +121,10 @@
 
   {#if app.resultTotal > app.results.length}
     <p class="capped">
-      Showing the first {app.results.length}. Narrow the filters to see the rest.
+      {ui("cat.capped", { count: app.results.length })}
     </p>
   {:else if app.resultTotal === 0 && app.phase === "ready"}
-    <p class="capped">Nothing matches. Clear a filter to widen the search.</p>
+    <p class="capped">{ui("cat.none")}</p>
   {/if}
 </section>
 {/if}

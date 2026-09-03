@@ -76,6 +76,10 @@ describe.skipIf(!runnable)("content that outgrows its box", () => {
       await page.goto(url as string, { waitUntil: "domcontentloaded" });
       await page.evaluate(() => {
         localStorage.setItem("ddtx.dbSource", "remote");
+        // Pin the interface language: these assertions are English, and the interface
+        // now follows `navigator.languages` by default, so a machine set to anything
+        // else would fail them for the wrong reason.
+        localStorage.setItem("ddtx.uiLocale", "en");
         localStorage.setItem("ddtx.dbRemoteUrl", "/db");
         localStorage.removeItem("ddtx.stageFull");
       });

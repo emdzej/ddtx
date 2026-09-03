@@ -54,6 +54,11 @@ The rest of the documentation is in [`docs/`](docs/README.md):
 - [`i18n-overlay.md`](docs/i18n-overlay.md) — the translation overlay, and why the
   database's strings being its primary keys makes it non-obvious.
 
+The interface itself is translated separately from the database, in
+`apps/web/src/i18n/locales/*.json` via i18next — English and Polish, defaulting to the
+browser's language. The two are different problems and stay two settings; see
+[the guide](docs/user-guide.md#8-language).
+
 ## Running it
 
 ```sh

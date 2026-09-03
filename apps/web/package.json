@@ -22,7 +22,8 @@
     "@ddtx/plugin-sdk": "workspace:*",
     "@ddtx/screens": "workspace:*",
     "@ddtx/session": "workspace:*",
-    "@lucide/svelte": "^1.39.0"
+    "@lucide/svelte": "^1.39.0",
+    "i18next": "^26.4.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",

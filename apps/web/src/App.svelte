@@ -15,6 +15,7 @@
   import Plugins from "./components/Plugins.svelte";
   import Popover from "./components/Popover.svelte";
   import About from "./components/About.svelte";
+  import { UI_LOCALES, setUiPreference, ui, uiLocale, uiPreference } from "./lib/ui.svelte.js";
   import Settings from "./components/Settings.svelte";
   import Trace from "./components/Trace.svelte";
   // Lucide (ISC), imported per icon so the rest of the pack is tree-shaken away.
@@ -57,11 +58,21 @@
   const live = $derived(app.linkKind === "elm");
 
   /** What each fill mode actually does, in the user's terms. */
-  const FILL_HELP: Record<string, string> = {
-    canned: "Only the replies stored in the database. Many fields stay empty.",
-    pad: "Stored replies, extended so every field has something to decode.",
-    synthetic: "All values generated. Useful for checking layout and text length.",
-  };
+  const FILL_HELP = $derived<Record<string, string>>({
+    canned: ui("demo.helpCanned"),
+    pad: ui("demo.helpPad"),
+    synthetic: ui("demo.helpSynthetic"),
+  });
+
+  /**
+   * What "match my browser" currently resolves to, named in its own language.
+   *
+   * An endonym — "Polski", not "Polish" — because that is what someone scanning a
+   * language list is looking for.
+   */
+  const systemLabel = $derived(
+    UI_LOCALES.find((locale) => locale.tag === uiLocale())?.label ?? uiLocale(),
+  );
 
   /**
    * The preference only takes effect while a screen is on show.
@@ -119,7 +130,7 @@
     <button
       class="wordmark"
       onclick={() => setAboutOpen(true)}
-      title="About ddtx"
+      title={ui("strip.about")}
       aria-haspopup="dialog"
     >
       DDT<span class="accent">X</span>
@@ -130,7 +141,7 @@
       href={`${__REPO_URL__}/releases/tag/${__APP_VERSION__}`}
       target="_blank"
       rel="noopener noreferrer"
-      title="Release notes for this version"
+      title={ui("strip.releaseNotes")}
     >
       {__APP_VERSION__}
     </a>
@@ -140,8 +151,8 @@
       href={__REPO_URL__}
       target="_blank"
       rel="noopener noreferrer"
-      title="ddtx on GitHub"
-      aria-label="ddtx on GitHub"
+      title={ui("strip.github")}
+      aria-label={ui("strip.github")}
     >
       <!-- GitHub's own mark, inlined so it takes `currentColor` and needs no fetch. -->
       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
@@ -154,7 +165,7 @@
     <span class="rule" aria-hidden="true"></span>
 
     {#if live}
-      <span class="badge">Live</span>
+      <span class="badge">{ui("strip.live")}</span>
     {:else}
       <!--
         The badge doubles as the trigger for what "demo" means: which replies are used
@@ -162,28 +173,28 @@
         thing that names it — and they were 242px of a strip that had run out of room.
       -->
       <Popover
-        label="Demo"
+        label={ui("strip.demo")}
         variant="badge"
-        title="How demo values are produced"
+        title={ui("strip.demoTitle")}
         marked={app.fill !== VIEW_DEFAULTS.fill || app.drift !== VIEW_DEFAULTS.drift}
       >
         <label class="field">
-          <span class="eyebrow">Fill</span>
+          <span class="eyebrow">{ui("demo.fill")}</span>
           <select
             bind:value={app.fill}
             onchange={() => void reconfigureDemo()}
             title={FILL_HELP[app.fill]}
           >
-            <option value="canned">Stored replies only</option>
-            <option value="pad">Stored, padded</option>
-            <option value="synthetic">All generated</option>
+            <option value="canned">{ui("demo.fillCanned")}</option>
+            <option value="pad">{ui("demo.fillPad")}</option>
+            <option value="synthetic">{ui("demo.fillSynthetic")}</option>
           </select>
         </label>
         <p class="note">{FILL_HELP[app.fill]}</p>
 
         <label class="field check">
           <input type="checkbox" bind:checked={app.drift} onchange={() => void reconfigureDemo()} />
-          <span>Vary values between reads</span>
+          <span>{ui("demo.drift")}</span>
         </label>
       </Popover>
     {/if}
@@ -212,9 +223,9 @@
         matters more than its convenience: whether writing is armed should be readable
         without opening anything. Off by default and never remembered — docs/plan.md §6.3.
       -->
-      <label class="control check danger" title="Allow buttons to send to the vehicle">
+      <label class="control check danger" title={ui("strip.allowWritingTitle")}>
         <input type="checkbox" bind:checked={app.writesEnabled} />
-        <span>Allow writing</span>
+        <span>{ui("strip.allowWriting")}</span>
       </label>
     {/if}
 
@@ -223,39 +234,64 @@
       were 471px of permanent strip.
     -->
     <Popover
-      label="View"
-      title="Language, zoom, and layout inspection"
-      marked={app.locale !== VIEW_DEFAULTS.locale ||
+      label={ui("view.label")}
+      title={ui("view.title")}
+      marked={uiPreference() !== "system" ||
+        app.locale !== VIEW_DEFAULTS.locale ||
         app.zoom !== VIEW_DEFAULTS.zoom ||
         app.inspect !== VIEW_DEFAULTS.inspect ||
         app.showUntranslated !== VIEW_DEFAULTS.showUntranslated}
     >
+      <!--
+        Two languages, because they are two things. This one is the app's own chrome and
+        is fully translated; the one below picks the database overlay, which is French as
+        authored and partly English, and will never be Polish — 541,061 requests is not a
+        translation anyone is going to finish. Polish buttons over a French database is
+        the normal case, not a broken one.
+      -->
       <label class="field">
-        <span class="eyebrow">Language</span>
+        <span class="eyebrow">{ui("view.interface")}</span>
+        <select
+          value={uiPreference()}
+          onchange={(event) => setUiPreference(event.currentTarget.value)}
+          title={ui("view.interfaceTitle")}
+        >
+          <option value="system">
+            {ui("view.interfaceSystemResolved", { language: systemLabel })}
+          </option>
+          {#each UI_LOCALES as locale (locale.tag)}
+            <option value={locale.tag}>{locale.label}</option>
+          {/each}
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="eyebrow">{ui("view.database")}</span>
         <select
           value={app.locale}
           onchange={(event) => void setLocale(event.currentTarget.value)}
-          title="Original shows the database exactly as authored — mostly French, but a third of it is already English"
+          title={ui("view.databaseTitle")}
         >
-          <option value="fr">Original — as authored</option>
-          <option value="en">English</option>
+          <option value="fr">{ui("view.databaseOriginal")}</option>
+          <option value="en">{ui("view.databaseEnglish")}</option>
         </select>
       </label>
+      <p class="note">{ui("view.databaseNote")}</p>
 
       {#if app.locale !== "fr"}
         <label class="field check">
           <input type="checkbox" bind:checked={app.showUntranslated} />
-          <span>Mark untranslated gaps</span>
+          <span>{ui("view.markGaps")}</span>
         </label>
       {/if}
 
       <label class="field">
-        <span class="eyebrow">Zoom</span>
+        <span class="eyebrow">{ui("view.zoom")}</span>
         <select bind:value={app.zoom}>
-          <option value={"fit"}>Fit width</option>
+          <option value={"fit"}>{ui("view.zoomFit")}</option>
           <option value={200}>200%</option>
           <option value={150}>150%</option>
-          <option value={100}>100% — native</option>
+          <option value={100}>{ui("view.zoomNative")}</option>
           <option value={75}>75%</option>
           <option value={50}>50%</option>
         </select>
@@ -263,12 +299,9 @@
 
       <label class="field check">
         <input type="checkbox" bind:checked={app.inspect} />
-        <span>Inspect layout</span>
+        <span>{ui("view.inspect")}</span>
       </label>
-      <p class="note">
-        Outlines every widget and its caption, so a screen's geometry can be read
-        directly. Works on live data too.
-      </p>
+      <p class="note">{ui("view.inspectNote")}</p>
     </Popover>
 
     <label class="control check">
@@ -278,7 +311,7 @@
         onchange={(event) => setAutoRefresh(event.currentTarget.checked)}
         disabled={app.screen === null}
       />
-      <span>Keep reading</span>
+      <span>{ui("strip.keepReading")}</span>
     </label>
 
     {#if app.serialSupported}
@@ -287,12 +320,12 @@
           class="link-button"
           onclick={() => void benchLink()}
           disabled={app.benching}
-          title="Time 200 AT exchanges to find this link's round-trip floor. Needs no vehicle."
+          title={ui("strip.measureTitle")}
         >
-          {app.benching ? "Measuring…" : "Measure link"}
+          {app.benching ? ui("strip.measuring") : ui("strip.measureLink")}
         </button>
         <button class="link-button live-link" onclick={() => void disconnect()}>
-          Disconnect
+          {ui("strip.disconnect")}
         </button>
       {:else}
         <button
@@ -300,12 +333,12 @@
           onclick={() => void connect()}
           disabled={app.connection === "connecting"}
         >
-          {app.connection === "connecting" ? "Connecting…" : "Connect vehicle"}
+          {app.connection === "connecting" ? ui("strip.connecting") : ui("strip.connect")}
         </button>
       {/if}
     {:else}
-      <span class="unsupported" title="Web Serial is available in Chrome and Edge on desktop">
-        No Web Serial
+      <span class="unsupported" title={ui("strip.noWebSerialTitle")}>
+        {ui("strip.noWebSerial")}
       </span>
     {/if}
 
@@ -313,22 +346,24 @@
       <button
         class="settings"
         onclick={() => setPluginsOpen(true)}
-        title="Ported DDT4All procedures"
+        title={ui("strip.proceduresTitle")}
       >
-        Procedures
+        {ui("strip.procedures")}
       </button>
     {/if}
 
     <button
       class="settings"
       onclick={() => setSettingsOpen(true)}
-      title={app.dbSource === null ? "Database settings" : `Database: ${app.dbSource.label}`}
+      title={app.dbSource === null
+        ? ui("strip.databaseTitle")
+        : ui("strip.databaseSource", { label: app.dbSource.label })}
     >
-      Database
+      {ui("strip.database")}
     </button>
 
     <button class="read" onclick={() => void refresh()} disabled={app.screen === null || app.refreshing}>
-      {app.refreshing ? "Reading…" : "Read now"}
+      {app.refreshing ? ui("strip.reading") : ui("strip.readNow")}
     </button>
 
     <!--
@@ -340,9 +375,9 @@
       class="expand"
       onclick={() => setStageFull(!stageFull)}
       disabled={app.screen === null}
-      title={stageFull ? "Dock the screen (Esc)" : "Give the screen the whole window (F)"}
+      title={stageFull ? ui("strip.dockTitle") : ui("strip.fullScreenTitle")}
       aria-pressed={stageFull}
-      aria-label={stageFull ? "Dock the screen" : "Full screen"}
+      aria-label={stageFull ? ui("strip.dock") : ui("strip.fullScreen")}
     >
       {#if stageFull}
         <Minimize2 size={15} strokeWidth={1.9} />
@@ -363,12 +398,12 @@
 
     <div class="stage" class:trace-open={app.traceOpen}>
       {#if app.phase === "loading"}
-        <p class="notice">Loading the catalogue…</p>
+        <p class="notice">{ui("stage.loading")}</p>
       {:else if app.phase === "error"}
         <div class="notice error">
-          <h2>The database could not be read</h2>
+          <h2>{ui("stage.dbUnreadable")}</h2>
           <p>{app.error}</p>
-          <button onclick={() => setSettingsOpen(true)}>Change the source</button>
+          <button onclick={() => setSettingsOpen(true)}>{ui("stage.changeSource")}</button>
         </div>
       {:else if app.screen !== null}
         <div class="scroller">
@@ -382,9 +417,7 @@
         <Trace snapshot={app.snapshot} />
       {:else}
         <p class="notice">
-          {app.selected === null
-            ? "Choose an ECU from the catalogue."
-            : "Choose one of its screens."}
+          {app.selected === null ? ui("stage.pickEcu") : ui("stage.pickScreen")}
         </p>
       {/if}
     </div>
@@ -409,15 +442,15 @@
   <div class="notice-row">
     {#if app.linkBench !== null}
       <p class="bench">
-        <span class="eyebrow">Link</span>
+        <span class="eyebrow">{ui("strip.linkLabel")}</span>
         <span class="hex">{app.linkBench}</span>
-        <button onclick={() => (app.linkBench = null)} aria-label="Dismiss">×</button>
+        <button onclick={() => (app.linkBench = null)} aria-label={ui("strip.dismiss")}>×</button>
       </p>
     {/if}
     {#if app.lastRefusal !== null}
       <p class="refusal" role="alert">
         {app.lastRefusal}
-        <button onclick={() => (app.lastRefusal = null)} aria-label="Dismiss">×</button>
+        <button onclick={() => (app.lastRefusal = null)} aria-label={ui("strip.dismiss")}>×</button>
       </p>
     {/if}
   </div>

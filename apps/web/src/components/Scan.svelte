@@ -10,30 +10,35 @@
 -->
 <script lang="ts">
   import { app, openScanResult, startScan, stopScan } from "../lib/state.svelte.js";
+  import { ui } from "../lib/ui.svelte.js";
 
   const vehicle = $derived(app.project === "" ? "every mapped address" : app.project);
 </script>
 
 <section class="scan">
   <header>
-    <span class="eyebrow">Fitted ECUs</span>
+    <span class="eyebrow">{ui("scan.title")}</span>
     {#if app.scanning}
-      <button class="stop" onclick={stopScan}>Stop</button>
+      <button class="stop" onclick={stopScan}>{ui("scan.stop")}</button>
     {:else}
-      <button class="go" onclick={() => void startScan()}>Sweep {vehicle}</button>
+      <button class="go" onclick={() => void startScan()}>
+        {ui("scan.sweep", { vehicle })}
+      </button>
     {/if}
   </header>
 
   {#if app.scanning && app.scanProgress !== null}
     <p class="progress">
-      <span class="hex">{app.scanProgress.done} / {app.scanProgress.total}</span>
-      addresses probed
+      {ui("scan.probed", {
+        done: app.scanProgress.done,
+        count: app.scanProgress.total,
+      })}
     </p>
   {:else if app.scanSummary !== null}
     <p class="progress">{app.scanSummary}</p>
   {:else}
     <p class="progress hint">
-      Asks each address the vehicle uses who it is. Read-only — nothing is written.
+      {ui("scan.hint")}
     </p>
   {/if}
 
@@ -45,20 +50,23 @@
           <button
             disabled={named === undefined}
             title={named === undefined
-              ? "Answered, but no catalogue entry describes it"
-              : `Open ${named.ecuname}`}
+              ? ui("scan.unrecognisedTitle")
+              : ui("scan.openTitle", { name: named.ecuname })}
             onclick={() => void openScanResult(result)}
           >
             <span class="addr hex">{result.address}</span>
             <span class="what">
-              {named?.ecuname ?? result.name ?? "unknown"}
-              {#if named === undefined}<span class="tag">unrecognised</span>{/if}
-              {#if named?.quality === "approximate"}<span class="tag soft">closest match</span>{/if}
+              {named?.ecuname ?? result.name ?? ui("scan.unknown")}
+              {#if named === undefined}<span class="tag">{ui("scan.unrecognised")}</span>{/if}
+              {#if named?.quality === "approximate"}<span class="tag soft">{ui("scan.approximate")}</span>{/if}
             </span>
             <span class="meta">
               {result.bus}
               {#if result.identity !== undefined}
-                · supplier {result.identity.supplier || "?"} · soft {result.identity.soft || "?"}
+                {ui("scan.identity", {
+                  supplier: result.identity.supplier || "?",
+                  soft: result.identity.soft || "?",
+                })}
               {/if}
             </span>
           </button>

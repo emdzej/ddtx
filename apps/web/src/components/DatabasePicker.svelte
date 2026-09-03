@@ -19,6 +19,7 @@
   } from "../lib/state.svelte.js";
   import { DEV_DB_URL, opfsSupported } from "../lib/dbInstall.js";
   import { folderPickerSupported } from "../lib/installStorage.js";
+  import { ui } from "../lib/ui.svelte.js";
 
   let remoteUrl = $state(DEV_DB_URL);
   let showAdvanced = $state(false);
@@ -51,13 +52,9 @@
 
 <section class="install">
   <div class="sheet">
-    <span class="eyebrow">Database</span>
-    <h1>Point ddtx at the ECU definitions</h1>
-    <p class="lede">
-      The catalogue is 1,580 ECUs and 1.19&nbsp;GB unpacked, so it is not part of the
-      app. Give it <code>ecu.zip</code> once and it is unpacked into this browser's own
-      storage — after that it opens with no prompt.
-    </p>
+    <span class="eyebrow">{ui("install.eyebrow")}</span>
+    <h1>{ui("install.head")}</h1>
+    <p class="lede">{@html ui("install.lede", { archive: "<code>ecu.zip</code>" })}</p>
 
     {#if app.folderNeedsPermission}
       <!--
@@ -65,12 +62,9 @@
         works inside a user gesture, which is why this is a button and not automatic.
       -->
       <div class="resume">
-        <p>
-          A folder was remembered from last time, but browsers drop file access on
-          reload. Granting it again takes one click.
-        </p>
+        <p>{ui("install.resumeBody")}</p>
         <button class="primary" onclick={() => void continueWithFolder()}>
-          Continue with last folder
+          {ui("install.resume")}
         </button>
       </div>
     {/if}
@@ -78,21 +72,18 @@
     {#if importing}
       <div class="progress" role="status">
         {#if app.importProgress?.phase === "hashing"}
-          <p class="count">Checking the archive…</p>
-          <p class="hint">
-            If it is the one already installed, nothing is rewritten.
-          </p>
+          <p class="count">{ui("install.hashing")}</p>
+          <p class="hint">{ui("install.hashingHint")}</p>
         {:else}
           <div class="bar"><div class="fill" style:width={`${pct}%`}></div></div>
           <p class="count">
-            <span class="hex">{app.importProgress?.done ?? 0}</span> of
-            <span class="hex">{app.importProgress?.total ?? 0}</span> entries ·
-            {fmtBytes(app.importProgress?.bytesOut ?? 0)} written
+            {ui("install.entries", {
+              done: app.importProgress?.done ?? 0,
+              total: app.importProgress?.total ?? 0,
+              written: fmtBytes(app.importProgress?.bytesOut ?? 0),
+            })}
           </p>
-          <p class="hint">
-            Unpacking runs off the main thread, so this stays responsive. It takes about
-            fifteen seconds.
-          </p>
+          <p class="hint">{ui("install.unpackingHint")}</p>
         {/if}
       </div>
     {:else}
@@ -103,9 +94,9 @@
         ondrop={onDrop}
       >
         <button class="primary" onclick={() => fileInput?.click()} disabled={!opfsSupported()}>
-          Choose ecu.zip
+          {ui("install.choose")}
         </button>
-        <span class="or">or drop it here</span>
+        <span class="or">{ui("install.orDrop")}</span>
         <input
           bind:this={fileInput}
           type="file"
@@ -116,10 +107,7 @@
       </div>
 
       {#if !opfsSupported()}
-        <p class="notice">
-          This browser has no private filesystem, so the archive cannot be unpacked
-          here. Use a folder or a URL below.
-        </p>
+        <p class="notice">{ui("install.noOpfs")}</p>
       {/if}
     {/if}
 
@@ -136,7 +124,11 @@
       <ul class="findings">
         {#each app.dbFindings as finding, i (i)}
           <li class:warn={finding.severity === "warning"}>
-            <span class="tag">{finding.severity === "warning" ? "check" : "problem"}</span>
+            <span class="tag">
+              {finding.severity === "warning"
+                ? ui("settings.findingWarn")
+                : ui("settings.findingError")}
+            </span>
             {finding.message}
           </li>
         {/each}
@@ -144,34 +136,31 @@
     {/if}
 
     <button class="disclose" onclick={() => (showAdvanced = !showAdvanced)}>
-      {showAdvanced ? "Hide" : "I already have a split tree"}
+      {showAdvanced ? ui("install.discloseHide") : ui("install.discloseShow")}
     </button>
 
     {#if showAdvanced}
       <div class="advanced">
         <div class="row">
           <div>
-            <h2>A folder on disk</h2>
-            <p>
-              A tree produced by <code>db-split</code>. Read directly, nothing is
-              copied — but the browser asks for permission again on every reload.
-            </p>
+            <h2>{ui("install.folderHead")}</h2>
+            <p>{@html ui("install.folderBody", { tool: "<code>db-split</code>" })}</p>
           </div>
           <button onclick={() => void chooseFolder()} disabled={!folderPickerSupported()}>
-            Choose folder
+            {ui("install.chooseFolder")}
           </button>
         </div>
         {#if !folderPickerSupported()}
-          <p class="hint">Folder picking needs a Chromium-based browser.</p>
+          <p class="hint">{ui("install.folderHint")}</p>
         {/if}
 
         <div class="row">
           <div>
-            <h2>A URL</h2>
-            <p>A static host serving the tree, or this project's dev server.</p>
+            <h2>{ui("install.urlHead")}</h2>
+            <p>{ui("install.urlBody")}</p>
             <input class="url" bind:value={remoteUrl} spellcheck="false" />
           </div>
-          <button onclick={() => void chooseRemote(remoteUrl)}>Use URL</button>
+          <button onclick={() => void chooseRemote(remoteUrl)}>{ui("install.useUrl")}</button>
         </div>
       </div>
     {/if}
@@ -216,7 +205,9 @@
     color: var(--ink-soft);
   }
 
-  code {
+  /* Reached through `@html`, so Svelte's scoping never sees these to hash them. */
+  .lede :global(code),
+  .row :global(code) {
     padding: 1px 4px;
     background: var(--paper);
     font-size: 0.92em;
