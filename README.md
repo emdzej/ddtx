@@ -59,6 +59,10 @@ The interface itself is translated separately from the database, in
 browser's language. The two are different problems and stay two settings; see
 [the guide](docs/user-guide.md#8-language).
 
+Changing it: [`AGENTS.md`](AGENTS.md) collects the conventions — which check to run,
+why the two translation systems must not be mixed, and an honest list of what is not
+covered. Worth reading before a first change, by a person or an agent.
+
 ## Running it
 
 ```sh
