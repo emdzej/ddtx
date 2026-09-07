@@ -101,7 +101,18 @@ export async function archiveDbSource(archive: CsFile): Promise<ArchiveDbSource>
     .filter((name) => name.endsWith(".json") && name !== "db.json")
     .map((name) => name.slice(0, -".json".length));
 
-  const built = buildIndex(raw, slugs);
+  // Parsed here rather than inside `buildIndex` so a corrupt index is described in
+  // this app's words. Left to `JSON.parse`, a truncated file reaches the user as
+  // "Expected property name or '}' in JSON at position 2", which says nothing about
+  // which file is wrong or what to do.
+  let upstream: Parameters<typeof buildIndex>[0];
+  try {
+    upstream = JSON.parse(new TextDecoder().decode(raw)) as Parameters<typeof buildIndex>[0];
+  } catch {
+    throw new Error("`db.json` in the archive is not valid JSON, so the archive is corrupt.");
+  }
+
+  const built = buildIndex(upstream, slugs);
   const indexBytes = new TextEncoder().encode(JSON.stringify(built.index));
 
   const facts: ArchiveFacts = {

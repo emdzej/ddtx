@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 import { zipSync } from "fflate";
-import { inspectArchive, inspectTree } from "./inspect.js";
+import { inspectTree } from "./inspect.js";
 
 const encoder = new TextEncoder();
 
@@ -38,79 +38,6 @@ function goodArchive(ecus = 3): Uint8Array {
   }
   return archive(files);
 }
-
-describe("inspectArchive", () => {
-  it("accepts a structurally sound archive", () => {
-    const report = inspectArchive(goodArchive());
-    expect(report.ok).toBe(true);
-    expect(report.findings).toEqual([]);
-    expect(report.counts).toMatchObject({ ecu: 3, layout: 3 });
-    expect(report.indexed).toBe(3);
-  });
-
-  it("rejects something that is not a zip at all, without reading it", () => {
-    // The commonest mistake: picking a PDF, an image, the unzipped folder's file.
-    const report = inspectArchive(encoder.encode("this is not a zip"));
-    expect(report.ok).toBe(false);
-    expect(report.findings[0]?.message).toMatch(/not a zip archive/);
-  });
-
-  it("names the missing index rather than failing vaguely", () => {
-    // A zip of something else entirely. The message has to say which file was wrong.
-    const report = inspectArchive(archive({ "notes.txt": "hello", "photo.json": "{}" }));
-    expect(report.ok).toBe(false);
-    expect(report.findings.some((f) => /db\.json/.test(f.message))).toBe(true);
-  });
-
-  it("rejects an index that is not JSON", () => {
-    const report = inspectArchive(archive({ "db.json": "{ truncated" }));
-    expect(report.ok).toBe(false);
-    expect(report.findings.some((f) => /not valid JSON/.test(f.message))).toBe(true);
-  });
-
-  it("rejects an archive with an index but no ECU files", () => {
-    const report = inspectArchive(archive({ "db.json": '{"a.json":{}}' }));
-    expect(report.ok).toBe(false);
-    expect(report.findings.some((f) => /no ECU definition files/.test(f.message))).toBe(true);
-  });
-
-  it("rejects ECUs with no layouts at all — no screens could be drawn", () => {
-    const report = inspectArchive(
-      archive({ "db.json": '{"a.json":{}}', "a.json": "{}", "b.json": "{}" }),
-    );
-    expect(report.ok).toBe(false);
-    expect(report.findings.some((f) => /no layouts/.test(f.message))).toBe(true);
-  });
-
-  it("warns, but allows, a partial set of layouts", () => {
-    // Survivable: the loader prunes what it cannot resolve. The user should still hear
-    // about it rather than wonder later why one ECU has no screens.
-    const report = inspectArchive(
-      archive({
-        "db.json": '{"a.json":{},"b.json":{}}',
-        "a.json": "{}",
-        "a.json.layout": "{}",
-        "b.json": "{}",
-      }),
-    );
-    expect(report.ok).toBe(true);
-    expect(report.findings.some((f) => f.severity === "warning")).toBe(true);
-  });
-
-  it("does not count graphics as ECUs", () => {
-    const report = inspectArchive(
-      archive({
-        "db.json": '{"a.json":{}}',
-        "a.json": "{}",
-        "a.json.layout": "{}",
-        "graphics/logo.png": "x",
-      }),
-    );
-    expect(report.counts.graphics).toBe(1);
-    expect(report.counts.ecu).toBe(1);
-    expect(report.ok).toBe(true);
-  });
-});
 
 describe("inspectTree", () => {
   /** A read function over a plain map, rejecting what is absent. */

@@ -70,17 +70,6 @@ export function folderPickerSupported(): boolean {
   return isFsaSupported();
 }
 
-/** Is an archive already stored? */
-export async function archiveStored(): Promise<boolean> {
-  if (!isOpfsSupported()) return false;
-  try {
-    const fs = await opfsFileSystem({ namespace: NAMESPACE });
-    return (await fs.file(ARCHIVE)) !== null;
-  } catch {
-    return false;
-  }
-}
-
 /** Bytes the stored archive occupies, and what the browser will allow. */
 export async function storageUsed(): Promise<{ archive: number; usage?: number; quota?: number }> {
   if (!isOpfsSupported()) return { archive: 0 };

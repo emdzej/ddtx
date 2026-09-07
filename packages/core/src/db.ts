@@ -308,10 +308,13 @@ export interface DbTreeIndex {
  * disagree about which ECUs exist.
  */
 export function buildIndex(
-  dbIndexRaw: Uint8Array,
+  dbIndexRaw: Uint8Array | DbIndex,
   ecuSlugs: readonly string[],
 ): { index: DbTreeIndex; indexedButNoFile: number; unindexed: string[] } {
-  const upstream = JSON.parse(new TextDecoder().decode(dbIndexRaw)) as DbIndex;
+  const upstream =
+    dbIndexRaw instanceof Uint8Array
+      ? (JSON.parse(new TextDecoder().decode(dbIndexRaw)) as DbIndex)
+      : dbIndexRaw;
   const ecus: Record<string, IndexEntry> = {};
   const groups = new Set<string>();
   const projects = new Set<string>();

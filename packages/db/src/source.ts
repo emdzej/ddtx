@@ -75,30 +75,3 @@ export class MemoryDbSource implements DbSource {
     return Promise.resolve(typeof entry === "string" ? new TextEncoder().encode(entry) : entry);
   }
 }
-
-/**
- * Wraps a source with a read-through cache.
- *
- * `store` is intentionally a plain async key/value interface so the browser app
- * can back it with OPFS or IndexedDB without this package knowing about either.
- */
-export interface BlobStore {
-  get(key: string): Promise<Uint8Array | undefined>;
-  set(key: string, value: Uint8Array): Promise<void>;
-}
-
-export class CachedDbSource implements DbSource {
-  constructor(
-    private readonly inner: DbSource,
-    private readonly store: BlobStore,
-  ) {}
-
-  async read(path: string): Promise<Uint8Array> {
-    const hit = await this.store.get(path);
-    if (hit !== undefined) return hit;
-    const bytes = await this.inner.read(path);
-    // A failed cache write must not fail the read — the data is already in hand.
-    await this.store.set(path, bytes).catch(() => undefined);
-    return bytes;
-  }
-}

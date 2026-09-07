@@ -90,3 +90,57 @@ describe.skipIf(!runnable)("ecu.zip read in place", () => {
     await expect(fromZip.read("ecu/does-not-exist.json")).rejects.toThrow(/no such path/);
   }, 60_000);
 });
+
+/**
+ * What a user sees when they pick the wrong file.
+ *
+ * This is the first-run failure path, and it used to be covered by `inspectArchive`,
+ * which itemised what was wrong before an import began. That pass is gone with the
+ * import, so these messages are now the only thing standing between a mistyped pick and
+ * a stack trace — and one of them was a raw `JSON.parse` error until this test was
+ * written.
+ *
+ * Needs no artefacts: the archives are built in memory.
+ */
+describe("a file that is not a usable archive", () => {
+  const zip = async (files: Record<string, string>): Promise<Uint8Array> => {
+    const { zipSync } = await import("fflate");
+    const encoder = new TextEncoder();
+    return zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, encoder.encode(v)])));
+  };
+  const open = async (bytes: Uint8Array): Promise<string> => {
+    const { BlobFile } = await import("@emdzej/csfs-core");
+    try {
+      await archiveDbSource(new BlobFile("/picked.zip", new Blob([bytes as BlobPart])));
+      return "(opened)";
+    } catch (cause) {
+      return cause instanceof Error ? cause.message : String(cause);
+    }
+  };
+
+  it("says it is not a zip", async () => {
+    expect(await open(new TextEncoder().encode("this is not a zip"))).toMatch(
+      /not a readable zip archive/i,
+    );
+    expect(await open(new Uint8Array(0))).toMatch(/not a readable zip archive/i);
+  });
+
+  it("says which file is missing when the index is absent", async () => {
+    expect(await open(await zip({ "notes.txt": "hello" }))).toMatch(/No `db.json` in the archive/);
+  });
+
+  it("says the index is corrupt rather than leaking a parser error", async () => {
+    const message = await open(await zip({ "db.json": "{ truncated" }));
+    expect(message).toMatch(/`db.json`.*not valid JSON/);
+    // The bug this pins: `JSON.parse`'s own words reached the user as "Expected
+    // property name or '}' in JSON at position 2", which names neither the file nor
+    // anything to do about it.
+    expect(message).not.toMatch(/position \d+/);
+  });
+
+  it("says so when the index describes nothing the archive holds", async () => {
+    expect(await open(await zip({ "db.json": '{"ghost.json":{}}' }))).toMatch(
+      /declares no ECUs that the archive has files for/,
+    );
+  });
+});

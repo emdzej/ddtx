@@ -25,6 +25,7 @@
     "@emdzej/csfs-zip": "^0.1.0"
   },
   "devDependencies": {
-    "@emdzej/csfs-node": "^0.1.0"
+    "@emdzej/csfs-node": "^0.1.0",
+    "fflate": "^0.8.3"
   }
 }
