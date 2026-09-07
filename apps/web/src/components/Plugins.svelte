@@ -131,9 +131,17 @@
     max-height: 100%;
     overflow-y: auto;
     background: var(--card);
-    border: 1px solid var(--rule);
+    /* The accent is the left edge and nothing else; the shadow does the separating. */
+    border: 0;
     /* Red rather than the blue the settings dialog uses: what lives in here writes. */
     border-left: 3px solid var(--red);
+    box-shadow: 0 12px 34px rgb(16 21 28 / 0.24);
+  }
+
+  /* See Settings.svelte: `tabindex="-1"` is for Escape, not for Tab. */
+  .dialog:focus,
+  .dialog:focus-visible {
+    outline: none;
   }
 
   header {

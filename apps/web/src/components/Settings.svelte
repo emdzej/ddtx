@@ -317,12 +317,29 @@
 
   .dialog {
     width: 100%;
-    max-width: 560px;
+    max-width: 640px;
     max-height: 100%;
     overflow-y: auto;
     background: var(--card);
-    border: 1px solid var(--rule);
+    /*
+      The accent is the left edge and nothing else. A hairline all the way round read as
+      a second frame inside the scrim's own contrast, and the shadow already separates
+      the panel from what is behind it.
+    */
+    border: 0;
     border-left: 3px solid var(--blue);
+    box-shadow: 0 12px 34px rgb(16 21 28 / 0.24);
+  }
+
+  /*
+    No focus ring on the panel itself. It carries `tabindex="-1"` only so Escape has
+    somewhere to land, and Tab never reaches it — but Chrome matches `:focus-visible`
+    on a programmatic focus when the last interaction was a keypress, which painted the
+    global blue outline around all four edges and undid the point of the left accent.
+  */
+  .dialog:focus,
+  .dialog:focus-visible {
+    outline: none;
   }
 
   header {
@@ -436,21 +453,42 @@
     color: var(--red);
   }
 
+  /*
+    `minmax(0, 1fr)` rather than `1fr`: a bare `1fr` track cannot shrink below its
+    content's min-content width, so the longest label-and-value pair set the floor and
+    the panel overflowed itself — 1px in English, visibly in Polish, where "Pamięć
+    przeglądarki" and "1.28 GB z 11.28 GB w użyciu" share a row. The same trap the
+    stacked `main` columns had.
+  */
   .facts {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 1px 16px;
     margin: 0;
-    padding: 0 16px 14px;
+    padding: 0 0 14px;
   }
 
   .facts div {
     display: flex;
     justify-content: space-between;
     gap: 10px;
+    /* So the row may shrink; without it each row keeps its own min-content floor. */
+    min-width: 0;
     padding: 4px 0;
     border-bottom: 1px solid var(--rule-soft);
     font-size: 11.5px;
+  }
+
+  /*
+    The value gives way before the label does. A truncated size still reads as a size,
+    where a truncated label leaves a number with nothing to say what it counts — and
+    the full text is in the title either way.
+  */
+  .facts dd {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   dt {

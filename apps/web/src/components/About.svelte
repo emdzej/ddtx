@@ -107,8 +107,25 @@
     max-height: 100%;
     overflow-y: auto;
     background: var(--card);
-    border: 1px solid var(--rule);
+    /*
+      The accent is the left edge and nothing else. A hairline all the way round read as
+      a second frame inside the scrim's own contrast, and the shadow already separates
+      the panel from what is behind it.
+    */
+    border: 0;
     border-left: 3px solid var(--blue);
+    box-shadow: 0 12px 34px rgb(16 21 28 / 0.24);
+  }
+
+  /*
+    No focus ring on the panel itself. It carries `tabindex="-1"` only so Escape has
+    somewhere to land, and Tab never reaches it — but Chrome matches `:focus-visible`
+    on a programmatic focus when the last interaction was a keypress, which painted the
+    global blue outline around all four edges and undid the point of the left accent.
+  */
+  .dialog:focus,
+  .dialog:focus-visible {
+    outline: none;
   }
 
   header {
