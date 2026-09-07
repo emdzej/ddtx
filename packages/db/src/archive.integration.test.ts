@@ -111,7 +111,7 @@ describe("a file that is not a usable archive", () => {
   const open = async (bytes: Uint8Array): Promise<string> => {
     const { BlobFile } = await import("@emdzej/csfs-core");
     try {
-      await archiveDbSource(new BlobFile("/picked.zip", new Blob([bytes as BlobPart])));
+      await archiveDbSource(new BlobFile("/picked.zip", new Blob([bytes])));
       return "(opened)";
     } catch (cause) {
       return cause instanceof Error ? cause.message : String(cause);
