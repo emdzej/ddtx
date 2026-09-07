@@ -76,7 +76,7 @@
       <label>
         <span class="eyebrow">{ui("cat.group")}</span>
         <select bind:value={app.group} onchange={applyFilters}>
-          <option value="">{ui("cat.groupAll", { count: app.groups.length })}</option>
+          <option value="">{ui("cat.groupAll", { total: app.groups.length })}</option>
           {#each app.groups as group (group.value)}
             <option value={group.value}>{group.label} — {group.count}</option>
           {/each}

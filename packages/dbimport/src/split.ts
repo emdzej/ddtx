@@ -48,6 +48,20 @@ const GRAPHICS_PREFIX = "graphics/";
  * between archive slices. The queue holds only what completed inside one 256 KB
  * slice — a few MB, not the 543 MB the whole tree would cost.
  */
+/**
+ * Records every path and size a split writes, so the csfs manifest can be built from
+ * the same numbers rather than from a second pass over the output.
+ */
+function recording(sink: SplitSink, into: Map<string, number>): SplitSink {
+  return {
+    ...sink,
+    write(path, bytes) {
+      into.set(path, bytes.length);
+      sink.write(path, bytes);
+    },
+  };
+}
+
 export interface SplitSink {
   /** Write `bytes` to a path relative to the tree root, e.g. `ecu/SIRIUS34.json`. */
   write(path: string, bytes: Uint8Array): void;
@@ -94,7 +108,13 @@ export interface SplitResult {
  * 1.28 GB. Writes happen inside the entry handler, which keeps the memory ceiling at
  * one entry — 5.4 MB at the largest — and needs no backpressure plumbing.
  */
-export async function splitArchive(zipBytes: Uint8Array, sink: SplitSink): Promise<SplitResult> {
+export async function splitArchive(
+  zipBytes: Uint8Array,
+  callerSink: SplitSink,
+): Promise<SplitResult> {
+  const written = new Map<string, number>();
+  const sink = recording(callerSink, written);
+
   await sink.mkdir?.("ecu");
   await sink.mkdir?.("layout");
 
@@ -142,6 +162,22 @@ export async function splitArchive(zipBytes: Uint8Array, sink: SplitSink): Promi
 
   const built = buildIndex(dbIndexRaw, ecuSlugs);
   sink.write("index.json", encode(JSON.stringify(built.index)));
+
+  /*
+    And a csfs manifest, because HTTP cannot list a directory: a static host will serve
+    any file you name and tell you nothing about what is there, so `@emdzej/csfs-http`
+    needs the sizes up front to read by range. Built from what was just written rather
+    than by walking the output — the sink knows every path and length already, and a
+    walk would only be able to disagree.
+
+    Written last, after `index.json`, so it can describe it too.
+  */
+  const manifest = {
+    csfs: 1,
+    label: "ddtx ECU database",
+    files: Object.fromEntries([...written].map(([path, size]) => [`/${path}`, size])),
+  };
+  sink.write("csfs-manifest.json", encode(JSON.stringify(manifest)));
   // The last slice's entries and the index are still queued at this point.
   await sink.flush?.();
   sink.log?.(

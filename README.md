@@ -72,8 +72,9 @@ pnpm dev          # builds the plugins, splits the database if present, serves t
 ```
 
 The ECU database is **not required to start**. Put it at `data/ecu.zip` and `pnpm dev`
-splits it for you; without it the app opens its picker and you can install a `ecu.zip`
-straight into the browser, which is what a deployed build does. See
+splits it into a tree for the dev server; without it the app opens its picker and you
+can hand it an `ecu.zip`, which is what a deployed build does — the archive is stored
+once and then **read in place**, never unpacked. See
 [`docs/database-install.md`](docs/database-install.md).
 
 | Script                | What it does                                                           |

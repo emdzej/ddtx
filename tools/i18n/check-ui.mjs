@@ -149,6 +149,34 @@ for (const [tag, catalogue] of catalogues) {
   }
 }
 
+// ── errors: placeholders that are not placeholders ───────────────────────────
+// `{count}` renders as the literal text `{count}`; i18next needs `{{count}}`. Comparing
+// locales cannot catch it, because a transcription slip lands in both at once.
+for (const [tag, catalogue] of catalogues) {
+  for (const [key, text] of Object.entries(catalogue)) {
+    for (const m of text.matchAll(/(?<!\{)\{(\w+)\}(?!\})/g)) {
+      errors.push({
+        file: `${tag}.json`,
+        message: `${key} has \`{${m[1]}}\` — i18next needs \`{{${m[1]}}}\`, so it renders literally`,
+      });
+    }
+  }
+}
+
+// `count` drives plural selection, so a message using it must have plural forms.
+for (const [tag, catalogue] of catalogues) {
+  for (const [key, text] of Object.entries(catalogue)) {
+    if (!text.includes("{{count}}")) continue;
+    if (PLURAL.test(key)) continue;
+    warnings.push({
+      file: `${tag}.json`,
+      // It still renders: i18next falls back to the base key. What is lost is
+      // agreement, which matters more in Polish's four forms than in English's two.
+      message: `${key} interpolates {{count}} but has no plural forms, so it cannot agree`,
+    });
+  }
+}
+
 // ── warnings ─────────────────────────────────────────────────────────────────
 const dead = [...new Set(Object.keys(source).map(baseId))]
   .filter((id) => !referenced.has(id))

@@ -30,20 +30,8 @@ const SOURCE_KEY = "ddtx.dbSource";
 const REMOTE_URL_KEY = "ddtx.dbRemoteUrl";
 
 /** Where the app is currently reading the database from. */
-export type DbSourceKind = "opfs" | "folder" | "remote";
+export type DbSourceKind = "archive" | "folder" | "url";
 
-export type PermissionState = "granted" | "denied" | "prompt";
-
-/**
- * The Chromium-only permission methods.
- *
- * The DOM types declare these as always present. In practice older Chromiums and any
- * test stub omit them, so they are narrowed here rather than trusted.
- */
-type HandleWithPermissions = {
-  queryPermission?: (desc?: { mode?: "read" | "readwrite" }) => Promise<PermissionState>;
-  requestPermission?: (desc?: { mode?: "read" | "readwrite" }) => Promise<PermissionState>;
-};
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -113,36 +101,7 @@ export async function clearFolderHandle(): Promise<void> {
   }
 }
 
-/**
- * Does the stored handle still have live read access?
- *
- * `"prompt"` is the normal answer after a reload and means "ask inside a click".
- * `"denied"` means the handle is spent and the user has to pick again.
- */
-export async function queryFolderPermission(
-  handle: FileSystemDirectoryHandle,
-): Promise<PermissionState> {
-  const h = handle as unknown as HandleWithPermissions;
-  if (h.queryPermission === undefined) return "prompt";
-  try {
-    return await h.queryPermission({ mode: "read" });
-  } catch {
-    return "prompt";
-  }
-}
 
-/** Must be called from inside a user gesture, or the browser refuses it. */
-export async function requestFolderPermission(
-  handle: FileSystemDirectoryHandle,
-): Promise<PermissionState> {
-  const h = handle as unknown as HandleWithPermissions;
-  if (h.requestPermission === undefined) return "prompt";
-  try {
-    return await h.requestPermission({ mode: "read" });
-  } catch {
-    return "denied";
-  }
-}
 
 /* ── plain strings ─────────────────────────────────────────────────────────── */
 
@@ -167,10 +126,15 @@ function writeLocal(key: string, value: string | null): void {
 
 export function savedSourceKind(): DbSourceKind | null {
   const value = readLocal(SOURCE_KEY);
-  return value === "opfs" || value === "folder" || value === "remote" ? value : null;
+  // `opfs` and `remote` were the old names for the same two things; a returning user
+  // has one of those in storage and should not be sent back to the picker for it.
+  if (value === "opfs" || value === "archive") return "archive";
+  if (value === "remote" || value === "url") return "url";
+  return value === "folder" ? "folder" : null;
 }
 
-export function saveSourceKind(kind: DbSourceKind): void {
+export function saveSourceKind(kind: DbSourceKind, url?: string): void {
+  if (url !== undefined) saveRemoteUrl(url);
   writeLocal(SOURCE_KEY, kind);
 }
 
@@ -182,9 +146,13 @@ export function saveRemoteUrl(url: string | null): void {
   writeLocal(REMOTE_URL_KEY, url);
 }
 
-/** Is the folder picker available at all? Chromium-only, unlike OPFS. */
-export function folderPickerSupported(): boolean {
-  return (
-    typeof (globalThis as { showDirectoryPicker?: unknown }).showDirectoryPicker === "function"
-  );
+/** Forget everything remembered about the source. */
+export async function clearStored(): Promise<void> {
+  await clearFolderHandle();
+  saveRemoteUrl(null);
+  try {
+    localStorage.removeItem(SOURCE_KEY);
+  } catch {
+    // Nothing to do: the caller is removing state, so a storage failure is moot.
+  }
 }

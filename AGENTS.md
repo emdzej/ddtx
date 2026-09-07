@@ -110,6 +110,10 @@ reads goes through `ui()`, including strings built in `state.svelte.ts`.
   add a fixture derived from it, and never paste a VIN into a commit, test, or doc.
 - **Release tags carry no `v` prefix.** `0.2.0`, not `v0.2.0` — the strip's version link
   and `release.yml` both assume that.
+- **File access is [csfs](https://github.com/emdzej/csfs)** (MIT), not hand-rolled:
+  `csfs-opfs`, `csfs-fsa`, `csfs-http`, and `csfs-zip` for reading `ecu.zip` without
+  unpacking it. `DbSource` survives as a one-method adapter over it. The PolyForm
+  constraint above is why it used to be hand-rolled.
 - Turbo `outputs` must list every build artifact. A cache hit once restored no plugin
   modules after a green build because `build/` was not declared.
 
@@ -123,6 +127,8 @@ Honest list, so nobody reports these as discoveries:
 - **`pnpm lint` is a no-op.** It reports "10 successful" and runs nothing — no package
   defines a `lint` script, and no eslint or prettier is configured. Green means
   untested, not clean.
+- **A repeat archive import re-copies rather than being skipped.** ~1 s, so the hash
+  comparison that existed for the 15 s unpack was removed with it.
 - **Nothing has been written to a real vehicle.** All thirteen ported procedures are
   marked unverified because they are.
 - **Database translation coverage is partial and uneven** — UCH 43%, EDC16 30% by

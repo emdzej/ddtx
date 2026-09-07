@@ -60,11 +60,43 @@ function serveDatabaseTree(): Plugin {
         }
 
         try {
-          if (!statSync(path).isFile()) return next();
+          const stat = statSync(path);
+          if (!stat.isFile()) return next();
           res.setHeader("content-type", "application/json; charset=utf-8");
           // The tree is immutable for a given snapshot, so let the browser keep it.
           res.setHeader("cache-control", "public, max-age=3600");
-          res.end(readFileSync(path));
+          /*
+            `Range`, because the client reads by range now and `@emdzej/csfs-http`
+            *rejects* a host that ignores it rather than trusting the 200 — a whole
+            body used as a slice returns the wrong bytes silently, so refusing is the
+            only safe reading of an ignored header. GitHub Pages honours Range, so
+            without this development would be the one place that did not.
+          */
+          res.setHeader("accept-ranges", "bytes");
+          const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
+          if (range === null) {
+            res.end(readFileSync(path));
+            return;
+          }
+
+          const [, rawStart, rawEnd] = range;
+          // An open start (`bytes=-500`) means the last N bytes, which is how a zip's
+          // central directory is found.
+          const suffix = rawStart === "";
+          const start = suffix
+            ? Math.max(0, stat.size - Number(rawEnd))
+            : Math.min(Number(rawStart), stat.size);
+          const end = suffix || rawEnd === "" ? stat.size - 1 : Math.min(Number(rawEnd), stat.size - 1);
+          if (end < start) {
+            res.statusCode = 416;
+            res.setHeader("content-range", `bytes */${stat.size}`);
+            res.end();
+            return;
+          }
+
+          res.statusCode = 206;
+          res.setHeader("content-range", `bytes ${start}-${end}/${stat.size}`);
+          res.end(readFileSync(path).subarray(start, end + 1));
         } catch {
           next();
         }

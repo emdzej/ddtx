@@ -18,23 +18,22 @@
     setSettingsOpen,
     verifyDatabase,
   } from "../lib/state.svelte.js";
-  import { DEV_DB_URL } from "../lib/dbInstall.js";
-  import { folderPickerSupported } from "../lib/installStorage.js";
-  import { ui } from "../lib/ui.svelte.js";
+  import { DEV_DB_URL, folderPickerSupported, opfsSupported } from "../lib/dbSource.js";
+    import { ui } from "../lib/ui.svelte.js";
 
   let remoteUrl = $state(DEV_DB_URL);
   let confirmingRemoval = $state(false);
   let fileInput: HTMLInputElement | undefined = $state();
 
   const source = $derived(app.dbSource);
-  const importing = $derived(app.importProgress !== null);
+  const importing = $derived(app.installing);
   /** Nothing to replace or remove until something is actually installed. */
   const haveTree = $derived(app.installed !== null);
 
   const SOURCE_LABEL = $derived<Record<string, string>>({
-    opfs: ui("settings.sourceOpfs"),
+    archive: ui("settings.sourceOpfs"),
     folder: ui("settings.sourceFolder"),
-    remote: ui("settings.sourceRemote"),
+    url: ui("settings.sourceRemote"),
   });
 
   function fmtBytes(n: number): string {
@@ -85,18 +84,19 @@
       </div>
       {#if app.installed !== null}
         <div>
+          <dt>{ui("settings.archiveSize")}</dt>
+          <dd>{fmtBytes(app.archiveBytes)}</dd>
+        </div>
+        <div>
+          <!-- What the archive turned out to hold. There is no snapshot hash any more:
+               nothing is unpacked, so there is no derived copy to compare against. -->
           <dt>{ui("settings.archive")}</dt>
-          <dd class="mono">{app.installed.source.name}</dd>
-        </div>
-        <div>
-          <dt>{ui("settings.unpacked")}</dt>
           <dd>
-            {fmtBytes(Object.values(app.installed.bytes).reduce((a, b) => a + b, 0))}
+            {ui("settings.ecusFound", {
+              ecus: app.installed.ecus,
+              entries: app.installed.entries,
+            })}
           </dd>
-        </div>
-        <div>
-          <dt title={ui("settings.snapshotTitle")}>{ui("settings.snapshot")}</dt>
-          <dd class="mono">{app.installed.source.sha256.slice(0, 12)}</dd>
         </div>
       {/if}
       {#if app.storage !== null && app.storage.quota > 0}
@@ -112,15 +112,8 @@
       {/if}
     </dl>
 
-    {#if app.importProgress?.phase === "hashing"}
-      <p class="hint">{ui("settings.hashing")}</p>
-    {:else if app.importProgress !== null}
-      <p class="hint unpacking">
-        {ui("settings.unpacking", {
-          done: app.importProgress.done,
-          total: app.importProgress.total,
-        })}
-      </p>
+    {#if importing}
+      <p class="hint unpacking">{ui("settings.copying")}</p>
     {/if}
     {#if app.importError !== null}
       <p class="notice">{app.importError}</p>

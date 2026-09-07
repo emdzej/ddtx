@@ -58,22 +58,19 @@ import {
 } from "@ddtx/screens";
 import type { DbSource, LoadedEcu } from "@ddtx/db";
 import {
-  grantFolder,
-  importArchive,
-  installedManifest,
-  pickFolder,
-  removeInstalledTree,
+  chooseFolder as pickFolderSource,
+  chooseRemote as openRemoteSource,
+  continueWithFolder as grantFolderSource,
+  folderStatus,
+  forgetArchive,
+  installArchive as storeArchive,
   resolveSavedSource,
-  storageUsage,
-  useRemote,
-  verifySource,
-  ArchiveRejected,
-  type ImportProgress,
+  storageUsed,
   type ResolvedSource,
-} from "./dbInstall.js";
-import type { TreeManifest } from "./dbImport.worker.js";
-import type { StructureFinding } from "@ddtx/dbimport";
-import { clearFolderHandle, saveRemoteUrl, type DbSourceKind } from "./installStorage.js";
+} from "./dbSource.js";
+import type { ArchiveFacts } from "@ddtx/db";
+import { inspectTree, type StructureFinding } from "@ddtx/dbimport";
+import type { DbSourceKind } from "./installStorage.js";
 import { discoverPlugins, hostFor, loadPluginModule } from "./plugins.js";
 import type { PluginManifest } from "@ddtx/plugin-sdk";
 
@@ -92,14 +89,17 @@ interface AppState {
   /** Set when a remembered folder needs its permission re-granted by a click. */
   folderNeedsPermission: boolean;
   /** Non-null while an archive is being checked or unpacked. */
-  importProgress: ImportProgress | null;
+  /** Set while the archive is being copied into the browser's storage. */
+  installing: boolean;
   importError: string | null;
-  /** What the last import produced, so settings can show what is installed. */
-  installed: TreeManifest | null;
+  /** What the open archive contains, so settings can describe it. */
+  installed: ArchiveFacts | null;
   settingsOpen: boolean;
   /** Is the about dialog up? Opened from the wordmark. */
   aboutOpen: boolean;
   storage: { usage: number; quota: number } | null;
+  /** Bytes the stored archive occupies. 104 MB, where the tree was 1.19 GB. */
+  archiveBytes: number;
 
   /** Plugins found in the bundle, grouped in the UI by category. */
   plugins: PluginManifest[];
@@ -352,12 +352,13 @@ export const app = $state<AppState>({
   error: null,
   dbSource: null,
   folderNeedsPermission: false,
-  importProgress: null,
+  installing: false,
   importError: null,
   installed: null,
   settingsOpen: false,
   aboutOpen: false,
   storage: null,
+  archiveBytes: 0,
   plugins: [],
   pluginsOpen: false,
   pluginRunning: null,
@@ -608,28 +609,21 @@ export async function openDatabase(): Promise<void> {
 
     if (resolved === null) {
       // First run, or the remembered source is gone. Not an error — offer the picker.
+      // A folder whose permission lapsed is the one case worth distinguishing: the
+      // handle survived the reload but its permission did not, and re-granting only
+      // works inside a user gesture, so the UI has to ask rather than retry.
       app.phase = "needs-database";
       app.dbSource = null;
-      return;
-    }
-    if ("needsPermission" in resolved) {
-      // The handle survived the reload but its permission did not, and
-      // `requestPermission` only works inside a user gesture. So the UI has to ask.
-      app.phase = "needs-database";
-      app.folderNeedsPermission = true;
-      pendingFolder = resolved.needsPermission;
+      app.folderNeedsPermission = (await folderStatus()) === "needs-permission";
       return;
     }
 
-    await useSource(resolved.ok);
+    await useSource(resolved);
   } catch (cause) {
     app.phase = "error";
     app.error = cause instanceof Error ? cause.message : String(cause);
   }
 }
-
-/** The folder whose permission lapsed, held until a click can re-request it. */
-let pendingFolder: FileSystemDirectoryHandle | null = null;
 
 /**
  * The source behind the open database.
@@ -645,6 +639,8 @@ async function useSource(resolved: ResolvedSource): Promise<void> {
   database = await EcuDatabase.open(resolved.source);
   dbSourceRef = resolved.source;
   app.dbSource = { kind: resolved.kind, label: resolved.label };
+  // Set here rather than only on install, so a reopened archive describes itself too.
+  app.installed = resolved.facts ?? null;
   app.folderNeedsPermission = false;
   app.ecuCount = database.size;
   app.protocols = [...database.protocols];
@@ -654,36 +650,24 @@ async function useSource(resolved: ResolvedSource): Promise<void> {
   applyFilters();
 }
 
-/** Unpack `ecu.zip` into the browser's own storage, then open it. */
+/**
+ * Copy `ecu.zip` into the browser's own storage and open it in place.
+ *
+ * No progress to report beyond "working": there is no per-entry loop any more, just a
+ * streamed copy of one 104 MB file, and `archiveDbSource` opens the picked file before
+ * anything is written — so a file that is not a database archive throws here with the
+ * installed one untouched.
+ */
 export async function installArchive(file: File): Promise<void> {
   app.importError = null;
   app.dbFindings = [];
-  // Starts as "hashing", not "unpacking": the archive is checked against what is
-  // already installed first, and claiming to unpack during that is a label the user
-  // can catch out when the same archive is then skipped instantly.
-  app.importProgress = { phase: "hashing", done: 0, total: 0, bytesOut: 0 };
+  app.installing = true;
   try {
-    const outcome = await importArchive(file, (progress) => {
-      app.importProgress = progress;
-    });
-    app.installed = outcome.manifest;
-    // Imported, but not silently: an ECU with no layout should be explained now rather
-    // than discovered as a screen that will not open.
-    if (outcome.warnings !== undefined) app.dbFindings = outcome.warnings;
-    const resolved = await resolveSavedSource();
-    if (resolved !== null && "ok" in resolved) await useSource(resolved.ok);
-    else throw new Error("the archive unpacked but the tree could not be opened");
+    await useSource(await storeArchive(file));
   } catch (cause) {
-    if (cause instanceof ArchiveRejected) {
-      // Refused before anything was written, so say so — the installed database is
-      // exactly as it was.
-      app.dbFindings = cause.findings;
-      app.importError = ui("install.archiveRejected");
-    } else {
-      app.importError = cause instanceof Error ? cause.message : String(cause);
-    }
+    app.importError = cause instanceof Error ? cause.message : String(cause);
   } finally {
-    app.importProgress = null;
+    app.installing = false;
   }
 }
 
@@ -692,18 +676,11 @@ export async function chooseFolder(): Promise<void> {
   app.importError = null;
   app.dbFindings = [];
   try {
-    const resolved = await pickFolder();
-    if (resolved === null) return;
-    await useSource(resolved);
+    // Verified before it is remembered, so a wrong folder never becomes the saved
+    // source; the message names what was missing.
+    await useSource(await pickFolderSource());
   } catch (cause) {
-    if (cause instanceof ArchiveRejected) {
-      // `pickFolder` verifies before remembering, so a wrong folder never becomes the
-      // saved source and the findings say which folder to pick instead.
-      app.dbFindings = cause.findings;
-      app.importError = ui("install.folderRejected");
-    } else {
-      app.importError = cause instanceof Error ? cause.message : String(cause);
-    }
+    app.importError = cause instanceof Error ? cause.message : String(cause);
   }
 }
 
@@ -719,7 +696,7 @@ export async function verifyDatabase(): Promise<void> {
   app.dbFindings = [];
   app.verifying = true;
   try {
-    const report = await verifySource(dbSourceRef);
+    const report = await inspectTree((path) => dbSourceRef!.read(path));
     app.dbFindings = report.findings;
     app.dbVerified = report.ok
       ? ui("settings.verifyOk", {
@@ -736,21 +713,18 @@ export async function verifyDatabase(): Promise<void> {
 
 /** Re-grant the remembered folder's permission. Must be called from a click. */
 export async function continueWithFolder(): Promise<void> {
-  if (pendingFolder === null) return;
-  const resolved = await grantFolder(pendingFolder);
-  if (resolved === null) {
-    app.importError = ui("install.noPermission");
-    return;
+  try {
+    await useSource(await grantFolderSource());
+  } catch (cause) {
+    app.importError = cause instanceof Error ? cause.message : String(cause);
   }
-  await useSource(resolved);
 }
 
 /** Read the tree over HTTP — a static host, or the dev server. */
 export async function chooseRemote(url: string): Promise<void> {
   app.importError = null;
-  saveRemoteUrl(url);
   try {
-    await useSource(useRemote(url));
+    await useSource(await openRemoteSource(url));
   } catch (cause) {
     app.importError = ui("install.urlUnreadable", {
       detail: cause instanceof Error ? cause.message : String(cause),
@@ -884,14 +858,17 @@ export function setSettingsOpen(open: boolean): void {
 }
 
 async function refreshStorage(): Promise<void> {
-  app.storage = await storageUsage();
-  app.installed = await installedManifest();
+  const used = await storageUsed();
+  app.storage =
+    used.quota === undefined || used.quota === 0
+      ? null
+      : { usage: used.usage ?? 0, quota: used.quota };
+  app.archiveBytes = used.archive;
 }
 
 /** Delete the installed tree and go back to the picker. */
 export async function forgetDatabase(): Promise<void> {
-  await removeInstalledTree();
-  await clearFolderHandle();
+  await forgetArchive();
   database = null;
   dbSourceRef = null;
   ecu = null;

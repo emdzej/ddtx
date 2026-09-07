@@ -1,150 +1,126 @@
 # Getting the database into the browser
 
-Until now the tree came from a Vite dev-server middleware pointed at `DDTX_DB_TREE`.
-That is fine for development and useless for a user: there was no way to install the
-database from the app itself. This is how that works.
+The database is 1,580 ECUs and is not ours to redistribute, so the app ships without it
+and the first run asks for it. This is what happens then.
 
----
+Everything below is a csfs backend — [`csfs`](https://github.com/emdzej/csfs) is one read
+API over a static host, a directory the user picked, the origin private file system, and
+inside a zip in any of those. ddtx has three of those four in use.
 
-## 1. Three sources, one interface
+## 1. The archive is not unpacked
 
-`DbSource` is deliberately one method wide — `read(path)` — because the tree is a flat
-set of known paths behind an index, so listing is never needed. That makes a new
-source about fifty lines.
+`ecu.zip` is copied into the origin private file system once, and **read where it lies**
+from then on. There is no extraction step.
 
-| Source         | Where the tree lives                 | Browser support               |
-| -------------- | ------------------------------------ | ----------------------------- |
-| `HttpDbSource` | A static host, or the dev middleware | Any                           |
-| `OpfsDbSource` | The origin private file system       | Any modern browser            |
-| `FsaDbSource`  | A folder the user picked on disk     | Chromium (File System Access) |
+This was not the original design. The app used to unpack all 3,749 entries into OPFS —
+1.19 GB, about fifteen seconds, a worker, a write queue that drained between archive
+slices, and a completion marker so an interrupted import could be told from a finished
+one. Reading the archive in place deletes every one of those problems, and it is
+*faster* afterwards:
 
-**OPFS is the default.** The user picks `ecu.zip` once, it is split into OPFS, and it
-stays there across sessions with no permission prompt ever again. The folder picker
-exists for people who already keep an unpacked tree on disk — the same shape as
-inpax's install picker — and it costs a permission re-grant on every reload, which is
-why it is not the default.
+| | in place | unpacked tree |
+| --- | --- | --- |
+| ECU definition, p50 | **1.3 ms** | 8.1 ms |
+| Layout, p50 | **0.9 ms** | 6.9 ms |
+| Open | **88 ms** | ~15 s to install |
+| Storage | **104 MB** | 1.19 GB |
 
----
+Not a surprise once stated: a zip entry is ~20 KB of I/O plus inflate, where the
+extracted file is 406 KB. The measurement is in `packages/db/src/archive.ts`.
 
-## 2. Writes queue, and drain between archive slices
+## 2. Two shapes, and where the mapping lives
 
-`@ddtx/dbimport` holds the splitting core with **no Node imports at all**, so one
-implementation serves both hosts:
+The archive is flat. The app's paths are not.
 
+| the app asks for | the archive holds |
+| --- | --- |
+| `index.json` | derived from `db.json` |
+| `ecu/<slug>.json` | `<slug>.json` |
+| `layout/<slug>.json` | `<slug>.json.layout` |
+
+`db-split` performs the same mapping when it writes a tree, which is why a tree and an
+archive are interchangeable behind `DbSource` — and why "emitted files are byte-identical
+to their zip entries" in that tool's header is a claim about *contents*, not paths.
+
+The mapping is ddtx's, not a csfs archive mount, because csfs's `entry` modes are
+`"relative"` and `"basename"` and neither rewrites an extension. `/layout/X.json` →
+`X.json.layout` is a fact about this database rather than about archives in general.
+
+`index.json` is not in the archive at all; `buildIndex` derives it, dropping the ECUs
+the upstream `db.json` lists but never shipped a file for and computing the
+group/project/protocol facets the catalogue filters on. That function lives in
+`@ddtx/core` so that `db-split` and the runtime share one implementation and cannot
+disagree about which ECUs exist.
+
+## 3. Three sources, one interface
+
+```ts
+interface DbSource {
+  read(path: string): Promise<Uint8Array>;
+}
 ```
-splitArchive(zipBytes, sink)
-  ├── tools/db-split   → writeFileSync + node:zlib pre-compression
-  └── apps/web worker  → queue on write, OPFS writes on flush
-```
 
-The constraint that shapes it: fflate's `Unzip` dispatches each entry from inside the
-previous entry's `ondata`, so `sink.write` is called with no opportunity to await —
-and **every OPFS write is async, including acquiring the file handle**.
+| Source | Backend | Cost |
+| --- | --- | --- |
+| **The archive** | `csfs-opfs` + `csfs-zip` | Never prompts again. The default |
+| **A folder** | `csfs-fsa` | A permission re-grant on every reload |
+| **A URL** | `csfs-http` | One `Range` request per read; needs a manifest |
 
-So `write` is synchronous and queues; `flush` is async and drains; and the splitter
-awaits `flush` between the 256 KB slices it pushes to fflate, where the stack is
-empty. The queue only ever holds the entries that completed inside one slice — a few
-MB, against the 543 MB that buffering the whole tree would cost. Awaiting between
-slices is also what yields to the event loop, which is what makes the progress bar
-move rather than freeze for the whole import.
+`DbSource` survives as the app's own one-method contract, adapted from csfs by
+`csfsDbSource`. The one difference worth naming: csfs returns `null` for an absent path,
+because testing existence should not need a `try`. `DbSource` rejects, because every path
+its callers ask for came out of the index, so a miss is a corrupt database rather than a
+normal answer.
 
-> **A wrong turn worth recording.** The first design used
-> `FileSystemSyncAccessHandle` to write _synchronously_ inside fflate's callback, on
-> the theory that a Worker-only sync API would let the sync core run untouched. It does
-> not work: the handle is obtained with `await fh.createSyncAccessHandle()`, so the
-> await problem moves rather than disappearing. The probe that "confirmed" it had an
-> `await` in an async loop and never tested the callback case at all. Sync access
-> handles are not needed here — which is also why the import works on any browser with
-> OPFS rather than Chromium only.
+Before csfs there were three hand-rolled implementations here. `DbSource`'s own comment
+explained why: the comparable abstraction, `@emdzej/bimmerz-vfs`, is PolyForm
+Noncommercial and this project is GPL-3.0-or-later. csfs is MIT, so that reason expired.
 
-The Worker stays, for the ordinary reason: fifteen seconds of work does not belong on
-the UI thread.
+## 4. The URL source needs a manifest, and Range
 
-### Measured, on this machine
+HTTP cannot list a directory: a static host serves any file you name and tells you
+nothing about what is there. So csfs-http reads from a manifest, and `db-split` emits
+`csfs-manifest.json` beside the tree — 3,161 entries, 166 KB, 43 KB gzipped, built from
+what the split just wrote rather than by walking the output.
 
-| Measurement                     | Result              |
-| ------------------------------- | ------------------- |
-| OPFS writes, one 64 MB file     | 91 ms (~700 MB/s)   |
-| 400 individual files            | 401 ms (~1 ms each) |
-| Same bytes into one packed file | 271 ms              |
+csfs-http also **rejects a host that ignores `Range`** rather than trusting its 200,
+because a whole body used as a slice returns the wrong bytes silently. The dev-server
+middleware answers 206 with a `content-range` for exactly that reason; without it,
+development would have been the one place that did not behave like production. GitHub
+Pages honours `Range`.
 
-**Per-file wins on simplicity, not speed.** Projected over the real 3,749 entries that
-is ~3.8 s against ~2.5 s packed. Spending 1.3 s of a one-time import buys a layout
-identical to the CLI's, a `read(path)` that is a direct file read, and no bespoke
-container format to version. If the tree grows an order of magnitude, revisit — the
-packed measurement is recorded so nobody has to re-derive it.
+## 5. Validation happens before anything is replaced
 
-The inflate dominates either way: ~100 MB compressed in, 1.19 GB out.
+`archiveDbSource` opens the picked file *before* the stored one is overwritten, so a file
+that is not a database archive fails with the working database untouched. That used to be
+an ordering rule to remember — an early version cleared the installed tree first, and a
+wrong file destroyed a working database — and it is now structural: the open either
+succeeds or nothing is written.
 
-### `manifest.json` is the completion marker
+`inspectTree` remains for the on-demand check in settings, which samples a dozen ECUs
+across the index and reports anything missing or malformed.
 
-There is no staging directory, and that is not a choice: **Chromium implements
-`FileSystemHandle.move` on file handles only.** A directory cannot be renamed, so
-"build beside the old tree and swap" is unavailable. Trying it fails at the swap with
-`FileSystemHandle.move is not a function`, after the full import has already run —
-which is exactly how this was found.
+## 6. What is persisted, and where
 
-So the old tree is removed, the new one is written in place, and the manifest is
-written **last**. `opfsTreeInstalled` tests for the manifest rather than the index,
-because the index is written before it: a run killed between the two would otherwise
-look installed while naming ECU files that were never written.
+| What | Where | Why there |
+| --- | --- | --- |
+| `ecu.zip` | OPFS, under a `ddtx` namespace | Never prompts. Namespaced because OPFS is shared by the whole origin |
+| The chosen source, and any URL | `localStorage` | Small, synchronous, and read before the first paint |
+| A picked folder's handle | IndexedDB | `localStorage` cannot hold a handle |
 
-The cost is that a failed re-import loses the tree that was there before. That is the
-honest failure — no database, and a picker — where a half-replaced tree that still
-reported itself installed would be worse.
+`persist()` is requested before the copy rather than after, so the browser is asked
+before 104 MB is written rather than once it is already at risk. It may refuse without
+explanation; the answer is reported rather than thrown, because an evictable database
+still works.
 
-### Measured in the browser
+A folder handle survives a reload but its **permission does not** — `queryPermission`
+reports `"prompt"` afterwards and re-granting only works inside a user gesture. So
+startup distinguishes "needs a click" from "gone" (`folderStatus`) and shows a button
+rather than the picker.
 
-| Step                                   | Result                                |
-| -------------------------------------- | ------------------------------------- |
-| First-run import of the real `ecu.zip` | ~11 s, 3,749 entries, 1.19 GB         |
-| Reload afterwards                      | Opens from OPFS, no picker, no prompt |
-| Re-import of the same archive          | Recognised by hash, not unpacked      |
+## 7. A repeat import is not skipped
 
-Faster than the CLI's 14.4 s, which is not surprising: the CLI also pre-compresses
-every file with gzip, and OPFS does not need that.
-
-## 3. Validation is a separate pass
-
-`validate()` re-reads every file to cross-check references, which the streaming pass
-cannot do because ECU and layout entries arrive in arbitrary order and holding both
-for all 1,580 ECUs is the 1.19 GB problem again.
-
-So it takes a `read(path)` callback and is **optional**. The CLI always runs it. The
-browser skips it by default: the findings are diagnostic, identical for a given
-archive, and already recorded in the `report.json` the CLI produces. A "verify" button
-in settings runs it on demand.
-
----
-
-## 4. What is persisted, and where
-
-`FileSystemDirectoryHandle` is structured-cloneable but not JSON-serialisable, so it
-cannot live in `localStorage`. Handles go in a one-record IndexedDB store; everything
-else is a string in `localStorage`.
-
-| Thing                    | Store        | Survives reload               |
-| ------------------------ | ------------ | ----------------------------- |
-| OPFS tree                | OPFS itself  | Yes, no prompt                |
-| Install folder handle    | IndexedDB    | Handle yes, **permission no** |
-| Remote tree URL          | localStorage | Yes                           |
-| Which source is selected | localStorage | Yes                           |
-
-The permission caveat is the whole reason the picker has a "Continue with last
-folder" button: browsers drop file access across reloads, `queryPermission` returns
-`"prompt"`, and `requestPermission` only works inside a user gesture. A button is a
-user gesture; startup code is not.
-
----
-
-## 5. Import is idempotent
-
-The manifest records the archive's SHA-256, so re-importing the same zip is detected
-and skipped — the same `--if-needed` check the CLI uses, for the same reason: it
-rewrites 1.19 GB and takes ~15 s, so it should happen once per snapshot.
-
-In the browser the hash comes from `crypto.subtle.digest`. Hashing 100 MB takes a
-second or two, so the UI reports "checking the archive" and only then "unpacking" —
-labelling the hash as unpacking is a claim the user catches out the moment the same
-archive is skipped instantly. It also makes "was the split skipped?" observable, which
-is what the e2e test asserts on.
+It used to be: the archive was hashed with `crypto.subtle` and a matching snapshot was
+recognised rather than unpacked again. That existed because unpacking cost fifteen
+seconds. Copying one file costs about one, and nothing is derived from the archive that
+a hash could be compared against, so the machinery went with the unpacking.

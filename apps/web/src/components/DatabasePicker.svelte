@@ -17,20 +17,14 @@
     continueWithFolder,
     installArchive,
   } from "../lib/state.svelte.js";
-  import { DEV_DB_URL, opfsSupported } from "../lib/dbInstall.js";
-  import { folderPickerSupported } from "../lib/installStorage.js";
+  import { DEV_DB_URL, folderPickerSupported, opfsSupported } from "../lib/dbSource.js";
   import { ui } from "../lib/ui.svelte.js";
 
   let remoteUrl = $state(DEV_DB_URL);
   let showAdvanced = $state(false);
   let fileInput: HTMLInputElement | undefined = $state();
 
-  const importing = $derived(app.importProgress !== null);
-  const pct = $derived(
-    app.importProgress === null
-      ? 0
-      : Math.min(100, Math.round((app.importProgress.done / app.importProgress.total) * 100)),
-  );
+  const importing = $derived(app.installing);
 
   function onPick(event: Event): void {
     const file = (event.currentTarget as HTMLInputElement).files?.[0];
@@ -70,21 +64,13 @@
     {/if}
 
     {#if importing}
+      <!--
+        No bar. There is nothing to count any more — one 104 MB file is streamed into
+        storage, and a determinate bar over a single copy would be inventing progress.
+      -->
       <div class="progress" role="status">
-        {#if app.importProgress?.phase === "hashing"}
-          <p class="count">{ui("install.hashing")}</p>
-          <p class="hint">{ui("install.hashingHint")}</p>
-        {:else}
-          <div class="bar"><div class="fill" style:width={`${pct}%`}></div></div>
-          <p class="count">
-            {ui("install.entries", {
-              done: app.importProgress?.done ?? 0,
-              total: app.importProgress?.total ?? 0,
-              written: fmtBytes(app.importProgress?.bytesOut ?? 0),
-            })}
-          </p>
-          <p class="hint">{ui("install.unpackingHint")}</p>
-        {/if}
+        <p class="count">{ui("install.copying")}</p>
+        <p class="hint">{ui("install.copyingHint")}</p>
       </div>
     {:else}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -284,19 +270,8 @@
     flex-shrink: 0;
   }
 
-  .progress .bar {
-    height: 6px;
-    background: var(--rule-soft);
-    overflow: hidden;
-  }
 
-  /* Fills blue, because this is progress and not a warning. */
-  .progress .fill {
-    height: 100%;
-    background: var(--blue);
-    transition: width 120ms linear;
-  }
-
+  
   .count {
     margin: 8px 0 2px;
     font-size: 12px;

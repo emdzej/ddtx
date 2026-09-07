@@ -1,11 +1,15 @@
 /**
- * The database install flow, in a real browser, against the real archive.
+ * Choosing a database, in a real browser, against the real archive.
  *
- * Everything here needs a browser to be true at all: OPFS, a Worker, `crypto.subtle`,
- * and persistence across a reload. None of it can be unit-tested, and the two bugs
- * this found were both invisible to a type-checker —
- * `FileSystemDirectoryHandle.move` not existing (which fails *after* a full 11-second
- * import), and the progress label claiming "unpacking" while it was really hashing.
+ * Everything here needs a browser to be true at all: OPFS, and persistence across a
+ * reload. None of it can be unit-tested.
+ *
+ * The flow this covers used to unpack 3,749 entries into OPFS and had to survive being
+ * interrupted mid-way; it now copies one file and reads it where it lies, so what is
+ * worth asserting has changed. Gone: progress phases, and a repeat import being
+ * skipped by hash — there is no derived copy to compare against, so a repeat simply
+ * re-copies 104 MB in about a second. Kept, because they are what a user notices: the
+ * picker on first run, no picker on the second, and settings describing what is there.
  *
  * Opt-in, because it needs a dev server, a browser, and a 100 MB archive:
  *
@@ -52,8 +56,8 @@ const archive = zip === undefined ? undefined : resolve(zip);
 const runnable =
   url !== undefined && executablePath !== undefined && archive !== undefined && existsSync(archive);
 
-describe.skipIf(!runnable)("installing the database in a browser", () => {
-  it("imports, persists across a reload, and skips a repeat of the same archive", async () => {
+describe.skipIf(!runnable)("choosing a database in a browser", () => {
+  it("stores the archive, reads it in place, and persists across a reload", async () => {
     const { chromium } = await import("playwright-core");
     // A persistent profile, because the point is that OPFS survives a reload. An
     // incognito context would throw the tree away and prove nothing.
@@ -80,15 +84,22 @@ describe.skipIf(!runnable)("installing the database in a browser", () => {
       await page.waitForSelector("section.install", { timeout: 20_000 });
       expect(await page.locator("main").count()).toBe(0);
 
+      const started = Date.now();
       await page.setInputFiles("input[type=file]", archive as string);
 
-      // 3,749 entries and 1.19 GB. Generous, because CI disks vary wildly.
-      await page.waitForSelector("main", { timeout: 300_000 });
+      // One streamed copy of 104 MB, then an 88 ms open. Still generous, because CI
+      // disks vary wildly — but this used to need 300 s.
+      await page.waitForSelector("main", { timeout: 120_000 });
+      const elapsed = Date.now() - started;
       expect(await page.locator("section.install").count()).toBe(0);
 
-      // The catalogue is the proof the tree is readable, not just present.
+      // The catalogue is the proof the archive is readable, not just present.
       const catalogue = await page.locator("aside, .catalogue").first().innerText();
       expect(catalogue).toContain("1580");
+
+      // Not a benchmark, a regression fence: unpacking took ~15 s and if that ever
+      // comes back this is where it shows. Loose enough for a slow disk.
+      expect(elapsed, `install took ${elapsed} ms`).toBeLessThan(30_000);
 
       // ── persistence ─────────────────────────────────────────────────────────
       await page.reload({ waitUntil: "networkidle" });
@@ -96,30 +107,28 @@ describe.skipIf(!runnable)("installing the database in a browser", () => {
       // No picker and no permission prompt: this is what OPFS buys over a folder.
       expect(await page.locator("section.install").count()).toBe(0);
 
-      // ── settings describes what is installed ────────────────────────────────
+      // ── settings describes what is stored ───────────────────────────────────
       await page.getByRole("button", { name: /^Database$/ }).click();
       await page.waitForSelector(".dialog", { timeout: 10_000 });
       const facts = await page.locator(".dialog .facts").innerText();
-      expect(facts).toContain("Unpacked in this browser");
+      expect(facts).toContain("Stored in this browser");
       expect(facts).toContain("1580");
+      // The archive itself, not an unpacked size: 104 MB rather than 1.19 GB, which is
+      // the whole point of reading it in place.
+      expect(facts).toMatch(/\b1\d\d MB|\b100 MB/);
 
-      // ── a repeat of the same archive is recognised, not redone ───────────────
-      let unpacked = false;
-      const watch = setInterval(() => {
-        void page
-          .locator(".dialog .unpacking")
-          .count()
-          .then((n) => {
-            if (n > 0) unpacked = true;
-          });
-      }, 150);
+      // ── a repeat re-copies, and that is fine ────────────────────────────────
+      // There is no snapshot hash any more: nothing is derived from the archive, so
+      // there is nothing to compare a new one against. Re-picking the same file copies
+      // it again, which costs about a second rather than fifteen.
+      const again = Date.now();
       await page.setInputFiles(".dialog input[type=file]", archive as string);
-      await page.waitForTimeout(8000);
-      clearInterval(watch);
-
-      // The hash matched, so the 1.19 GB was not written a second time. This is only
-      // observable because the UI distinguishes hashing from unpacking.
-      expect(unpacked).toBe(false);
+      await page.waitForFunction(
+        () => document.querySelector(".dialog .unpacking") === null,
+        undefined,
+        { timeout: 120_000 },
+      );
+      expect(Date.now() - again, "a repeat import got slower").toBeLessThan(30_000);
       expect(await page.locator("main").count()).toBe(1);
 
       expect(problems).toEqual([]);
