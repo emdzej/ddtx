@@ -294,3 +294,59 @@ export interface DbTreeIndex {
   projects: string[];
   protocols: string[];
 }
+
+/**
+ * Derive the tree index from the upstream `db.json`.
+ *
+ * Two jobs. It drops entries the archive has no file for — the upstream index lists
+ * ECUs that were never shipped — and it derives the group/project/protocol facets the
+ * catalogue filters on, which the upstream index does not carry.
+ *
+ * Pure, and here rather than in `@ddtx/dbimport`, because it runs in two places now:
+ * once when `db-split` writes `index.json`, and once every time an archive is opened
+ * and the index is built in memory instead. One implementation means the two cannot
+ * disagree about which ECUs exist.
+ */
+export function buildIndex(
+  dbIndexRaw: Uint8Array,
+  ecuSlugs: readonly string[],
+): { index: DbTreeIndex; indexedButNoFile: number; unindexed: string[] } {
+  const upstream = JSON.parse(new TextDecoder().decode(dbIndexRaw)) as DbIndex;
+  const ecus: Record<string, IndexEntry> = {};
+  const groups = new Set<string>();
+  const projects = new Set<string>();
+  const protocols = new Set<string>();
+  const knownEcus = new Set(ecuSlugs);
+
+  let indexedButNoFile = 0;
+  for (const [key, entry] of Object.entries(upstream)) {
+    const slug = key.endsWith(".json") ? key.slice(0, -".json".length) : key;
+    if (!knownEcus.has(slug)) {
+      indexedButNoFile += 1;
+      continue;
+    }
+    ecus[slug] = entry;
+    if (entry.group) groups.add(entry.group);
+    for (const project of entry.projects) {
+      // `#text` and friends are XML node names that leaked through the original
+      // converter (`projects.append(project.nodeName)` doesn't skip text nodes).
+      // They are not vehicles, so they stay out of the facet — the raw entries keep
+      // them, since the files are emitted byte-identical.
+      if (project && !project.startsWith("#")) projects.add(project);
+    }
+    if (entry.protocol) protocols.add(entry.protocol);
+  }
+
+  return {
+    index: {
+      format: 1,
+      ecus,
+      groups: [...groups].sort(),
+      projects: [...projects].sort(),
+      protocols: [...protocols].sort(),
+    },
+    indexedButNoFile,
+    unindexed: ecuSlugs.filter((slug) => ecus[slug] === undefined),
+  };
+}
+

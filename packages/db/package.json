@@ -7,7 +7,12 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit",
@@ -15,6 +20,11 @@
   },
   "dependencies": {
     "@ddtx/codec": "workspace:*",
-    "@ddtx/core": "workspace:*"
+    "@ddtx/core": "workspace:*",
+    "@emdzej/csfs-core": "^0.1.0",
+    "@emdzej/csfs-zip": "^0.1.0"
+  },
+  "devDependencies": {
+    "@emdzej/csfs-node": "^0.1.0"
   }
 }

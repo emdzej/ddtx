@@ -22,6 +22,11 @@
     "@ddtx/plugin-sdk": "workspace:*",
     "@ddtx/screens": "workspace:*",
     "@ddtx/session": "workspace:*",
+    "@emdzej/csfs-core": "^0.1.0",
+    "@emdzej/csfs-fsa": "^0.1.0",
+    "@emdzej/csfs-http": "^0.1.0",
+    "@emdzej/csfs-opfs": "^0.1.0",
+    "@emdzej/csfs-zip": "^0.1.0",
     "@lucide/svelte": "^1.39.0",
     "i18next": "^26.4.1"
   },

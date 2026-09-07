@@ -35,7 +35,7 @@
  */
 
 import { Unzip, UnzipInflate } from "fflate";
-import type { DbIndex, DbTreeIndex, IndexEntry } from "@ddtx/core";
+import { buildIndex, type DbTreeIndex } from "@ddtx/core";
 
 const GRAPHICS_PREFIX = "graphics/";
 
@@ -167,48 +167,6 @@ export async function splitArchive(zipBytes: Uint8Array, sink: SplitSink): Promi
 }
 
 /** Turn the archive's `db.json` into the faceted index the app loads at startup. */
-function buildIndex(
-  dbIndexRaw: Uint8Array,
-  ecuSlugs: readonly string[],
-): { index: DbTreeIndex; indexedButNoFile: number; unindexed: string[] } {
-  const upstream = JSON.parse(new TextDecoder().decode(dbIndexRaw)) as DbIndex;
-  const ecus: Record<string, IndexEntry> = {};
-  const groups = new Set<string>();
-  const projects = new Set<string>();
-  const protocols = new Set<string>();
-  const knownEcus = new Set(ecuSlugs);
-
-  let indexedButNoFile = 0;
-  for (const [key, entry] of Object.entries(upstream)) {
-    const slug = key.endsWith(".json") ? key.slice(0, -".json".length) : key;
-    if (!knownEcus.has(slug)) {
-      indexedButNoFile += 1;
-      continue;
-    }
-    ecus[slug] = entry;
-    if (entry.group) groups.add(entry.group);
-    for (const project of entry.projects) {
-      // `#text` and friends are XML node names that leaked through the original
-      // converter (`projects.append(project.nodeName)` doesn't skip text nodes).
-      // They are not vehicles, so they stay out of the facet — the raw entries keep
-      // them, since the files are emitted byte-identical.
-      if (project && !project.startsWith("#")) projects.add(project);
-    }
-    if (entry.protocol) protocols.add(entry.protocol);
-  }
-
-  return {
-    index: {
-      format: 1,
-      ecus,
-      groups: [...groups].sort(),
-      projects: [...projects].sort(),
-      protocols: [...protocols].sort(),
-    },
-    indexedButNoFile,
-    unindexed: ecuSlugs.filter((slug) => ecus[slug] === undefined),
-  };
-}
 
 /**
  * Feed the archive to fflate in slices rather than one call.
