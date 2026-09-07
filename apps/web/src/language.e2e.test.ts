@@ -110,10 +110,12 @@ describe.skipIf(!runnable)("the interface language", () => {
       await page.waitForSelector("main", { timeout: 30_000 });
       expect(await page.locator("button.read").innerText()).toBe("Odczytaj");
 
-      // Widok ▾ → Interfejs → English
-      await page.getByRole("button", { name: /Widok/ }).click();
-      await page.waitForTimeout(200);
-      await page.locator(".popover select").first().selectOption("en");
+      // cog → Widok → Interfejs → English. The picker moved out of a strip popover
+      // into the settings dialog, so it is reached by the cog and a tab now.
+      await page.locator(".strip .cog").click();
+      await page.waitForSelector(".dialog", { timeout: 10_000 });
+      await page.getByRole("tab", { name: "Widok" }).click();
+      await page.locator(".dialog .field select").first().selectOption("en");
       await page.waitForTimeout(300);
       expect(await page.locator("button.read").innerText()).toBe("Read now");
       expect(await page.evaluate(() => document.documentElement.lang)).toBe("en");
@@ -126,9 +128,10 @@ describe.skipIf(!runnable)("the interface language", () => {
 
       // Back to following the browser — and the stored value is the preference, so it
       // resolves to Polish again rather than staying on whatever it last was.
-      await page.getByRole("button", { name: /^View/ }).click();
-      await page.waitForTimeout(200);
-      await page.locator(".popover select").first().selectOption("system");
+      await page.locator(".strip .cog").click();
+      await page.waitForSelector(".dialog", { timeout: 10_000 });
+      await page.getByRole("tab", { name: "View" }).click();
+      await page.locator(".dialog .field select").first().selectOption("system");
       await page.waitForTimeout(300);
       expect(await page.locator("button.read").innerText()).toBe("Odczytaj");
       expect(await page.evaluate(() => localStorage.getItem("ddtx.uiLocale"))).toBe("system");

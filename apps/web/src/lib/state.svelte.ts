@@ -80,6 +80,9 @@ import type { PluginManifest } from "@ddtx/plugin-sdk";
  */
 export type Phase = "idle" | "loading" | "needs-database" | "ready" | "error";
 
+/** Sections of the settings dialog. */
+export type SettingsTab = "database" | "view";
+
 interface AppState {
   phase: Phase;
   error: string | null;
@@ -95,6 +98,8 @@ interface AppState {
   /** What the open archive contains, so settings can describe it. */
   installed: ArchiveFacts | null;
   settingsOpen: boolean;
+  /** Which section of the settings dialog is showing. */
+  settingsTab: SettingsTab;
   /** Is the about dialog up? Opened from the wordmark. */
   aboutOpen: boolean;
   storage: { usage: number; quota: number } | null;
@@ -356,6 +361,7 @@ export const app = $state<AppState>({
   importError: null,
   installed: null,
   settingsOpen: false,
+  settingsTab: "database",
   aboutOpen: false,
   storage: null,
   archiveBytes: 0,
@@ -852,8 +858,16 @@ export function setAboutOpen(open: boolean): void {
   app.aboutOpen = open;
 }
 
-export function setSettingsOpen(open: boolean): void {
+/**
+ * Open the settings dialog, optionally on a particular tab.
+ *
+ * The tab is a parameter because callers know which question they are answering: the
+ * stage's "the database could not be read" wants the database section, not whichever
+ * one happened to be open last.
+ */
+export function setSettingsOpen(open: boolean, tab?: SettingsTab): void {
   app.settingsOpen = open;
+  if (tab !== undefined) app.settingsTab = tab;
   if (open) void refreshStorage();
 }
 

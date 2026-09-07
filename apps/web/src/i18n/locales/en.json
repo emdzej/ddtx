@@ -19,9 +19,6 @@
     "noWebSerialTitle": "Web Serial is available in Chrome and Edge on desktop",
     "procedures": "Procedures",
     "proceduresTitle": "Ported DDT4All procedures",
-    "database": "Database",
-    "databaseTitle": "Database settings",
-    "databaseSource": "Database: {{label}}",
     "readNow": "Read now",
     "reading": "Reading…",
     "fullScreen": "Full screen",
@@ -29,7 +26,9 @@
     "dock": "Dock the screen",
     "dockTitle": "Dock the screen (Esc)",
     "dismiss": "Dismiss",
-    "linkLabel": "Link"
+    "linkLabel": "Link",
+    "settings": "Settings",
+    "settingsTitle": "Language, zoom, layout inspection, and where the database comes from"
   },
   "demo": {
     "fill": "Fill",
@@ -42,8 +41,6 @@
     "drift": "Vary values between reads"
   },
   "view": {
-    "label": "View",
-    "title": "Interface language, database language, zoom, and layout inspection",
     "interface": "Interface",
     "interfaceTitle": "The language of ddtx's own buttons and dialogs",
     "interfaceSystemResolved": "Match my browser — {{language}}",
@@ -167,7 +164,6 @@
     "adapterBusy": "Another ddtx tab is using this adapter."
   },
   "settings": {
-    "title": "Database",
     "close": "Close",
     "source": "Source",
     "sourceNone": "none",
@@ -183,14 +179,14 @@
     "findingError": "problem",
     "replaceHead": "Replace with another archive",
     "installHead": "Install from an archive",
-    "installBody": "Unpacks into this browser. The same archive is recognised and skipped rather than rewritten.",
+    "installBody": "Copied into this browser and read where it lies, not unpacked. Picking the same archive again simply copies it again.",
     "chooseZip": "Choose ecu.zip",
     "verifyHead": "Check the installed database",
     "verifyBody": "Reads the index and samples a dozen ECUs, reporting anything missing or malformed. The same check runs when a database is installed.",
     "verify": "Verify",
     "verifying": "Checking…",
     "folderHead": "Read a folder instead",
-    "folderBody": "An already-split tree. Asks for permission again on every reload.",
+    "folderBody": "An already-split tree, read directly. Asks for permission again on every reload.",
     "chooseFolder": "Choose folder",
     "urlHead": "Read a URL instead",
     "useUrl": "Use URL",
@@ -201,7 +197,11 @@
     "verifyOk": "Checked: index plus {{sampled}} sampled ECUs, {{indexed}} declared. No problems found.",
     "archiveSize": "Archive size",
     "ecusFound": "{{ecus}} ECUs, {{entries}} entries",
-    "copying": "Copying the archive into this browser…"
+    "copying": "Copying the archive into this browser…",
+    "headline": "Settings",
+    "sections": "Settings sections",
+    "tabDatabase": "Database",
+    "tabView": "View"
   },
   "install": {
     "eyebrow": "Database",

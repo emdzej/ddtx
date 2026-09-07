@@ -47,7 +47,7 @@ const executablePath = findChromium();
 const runnable = url !== undefined && executablePath !== undefined;
 
 describe.skipIf(!runnable)("the top strip", () => {
-  it("fits on one row down to 860px in every language, settings behind popovers", async () => {
+  it("fits on one row down to 860px in every language, with no inline settings", async () => {
     // Every language, because the budget is about pixels and translations are not the
     // same width. Polish needed 49px more than English and overflowed 860px by 10 —
     // the strip still looked fine, the whole document just scrolled sideways. Asserting
@@ -103,34 +103,46 @@ describe.skipIf(!runnable)("the top strip", () => {
     }
   }, 90_000);
 
-  it("shows a marker only when a setting is off its default", async () => {
+  it("shows a marker on the cog only when a setting is off its default", async () => {
     // An indicator that is always on says nothing. This was written against the wrong
-    // default once and the dot was permanent.
+    // default once and the dot was permanent — and again when the `View` popover became
+    // a tab, because the interface language has a default and someone reading Polish
+    // would have carried a lit dot forever. It is deliberately not part of the
+    // condition; what is, is the states you can forget you are in.
     const { chromium } = await import("playwright-core");
     const browser = await chromium.launch({ executablePath });
     try {
       const page = await browser.newPage({ viewport: { width: 1024, height: 700 } });
-      await page.goto(url as string, { waitUntil: "networkidle" });
+      await page.goto(url as string, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => localStorage.setItem("ddtx.uiLocale", "pl"));
+      await page.reload({ waitUntil: "networkidle" });
       await page.waitForTimeout(600);
 
-      const dots = () => page.locator(".strip .popover .dot").count();
-      expect(await dots()).toBe(0);
+      const dots = () => page.locator(".strip .cog .dot").count();
+      // Polish, which is off the `system` default — and must not light the dot.
+      expect(await dots(), "the interface language lit the dot").toBe(0);
 
-      await page.getByRole("button", { name: /^View/ }).click();
-      const inspect = page.locator(".strip .panel input[type=checkbox]").first();
+      await page.locator(".strip .cog").click();
+      await page.waitForSelector(".dialog", { timeout: 10_000 });
+      await page.getByRole("tab", { name: /Widok|View/ }).click();
+      const inspect = page.locator(".dialog .field.check input[type=checkbox]").last();
       await inspect.check();
+      await page.waitForTimeout(150);
       expect(await dots()).toBe(1);
 
       await inspect.uncheck();
+      await page.waitForTimeout(150);
       expect(await dots()).toBe(0);
     } finally {
       await browser.close();
     }
   }, 60_000);
 
-  it("keeps exactly one panel open when moving between triggers", async () => {
+  it("closes the demo popover when the cog is clicked", async () => {
     // The outside-click handler runs in the capture phase for this reason: without it,
-    // clicking straight from one trigger to the other leaves both panels open.
+    // clicking straight from a popover trigger to another control leaves the panel
+    // open. There used to be two popovers to move between; now the cog is the other
+    // trigger, and the failure is the same one.
     const { chromium } = await import("playwright-core");
     const browser = await chromium.launch({ executablePath });
     try {
@@ -138,16 +150,13 @@ describe.skipIf(!runnable)("the top strip", () => {
       await page.goto(url as string, { waitUntil: "networkidle" });
       await page.waitForTimeout(600);
 
-      await page.getByRole("button", { name: /^View/ }).click();
-      expect(await page.locator(".strip .panel").count()).toBe(1);
-
       await page.getByRole("button", { name: /^Demo/ }).click();
-      await page.waitForTimeout(120);
       expect(await page.locator(".strip .panel").count()).toBe(1);
 
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(120);
-      expect(await page.locator(".strip .panel").count()).toBe(0);
+      await page.locator(".strip .cog").click();
+      await page.waitForTimeout(150);
+      expect(await page.locator(".strip .panel").count(), "the popover stayed open").toBe(0);
+      expect(await page.locator(".dialog").count()).toBe(1);
     } finally {
       await browser.close();
     }

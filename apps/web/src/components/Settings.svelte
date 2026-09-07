@@ -1,9 +1,14 @@
 <!--
-  Where the database comes from, and how to change it.
+  Everything that is a setting, in two sections behind one cog.
 
-  Deliberately narrow: this is not a preferences panel for everything the app can do.
-  It answers "what am I reading, and how do I swap it", because that is the question a
-  user has after the first run and there is nowhere else to ask it.
+  It used to be a `View` popover in the strip and a `Database` button next to it. They
+  answered the same *kind* of question — how the app looks, what it reads — and neither
+  is touched during a job, so they cost 158px of a strip with a measured width budget
+  for no working benefit.
+
+  Both bodies stay mounted and one is hidden, rather than being swapped with `{#if}`.
+  Switching tabs then keeps a half-typed URL and the scroll position, which a remount
+  would throw away.
 
   Removing the database is the one destructive control here, so it is separated,
   coloured, and states its consequence rather than being a bare "Reset".
@@ -15,17 +20,31 @@
     chooseRemote,
     forgetDatabase,
     installArchive,
+    setLocale,
     setSettingsOpen,
     verifyDatabase,
+    VIEW_DEFAULTS,
+    type SettingsTab,
   } from "../lib/state.svelte.js";
   import { DEV_DB_URL, folderPickerSupported, opfsSupported } from "../lib/dbSource.js";
-    import { ui } from "../lib/ui.svelte.js";
+  import { UI_LOCALES, setUiPreference, ui, uiLocale, uiPreference } from "../lib/ui.svelte.js";
+  import X from "@lucide/svelte/icons/x";
 
   let remoteUrl = $state(DEV_DB_URL);
   let confirmingRemoval = $state(false);
   let fileInput: HTMLInputElement | undefined = $state();
 
+  const tab = $derived(app.settingsTab);
   const source = $derived(app.dbSource);
+
+  /** Endonym, so a Polish reader looks for "Polski" rather than "Polish". */
+  const systemLabel = $derived(
+    UI_LOCALES.find((locale) => locale.tag === uiLocale())?.label ?? uiLocale(),
+  );
+
+  function show(next: SettingsTab): void {
+    app.settingsTab = next;
+  }
   const importing = $derived(app.installing);
   /** Nothing to replace or remove until something is actually installed. */
   const haveTree = $derived(app.installed !== null);
@@ -63,11 +82,98 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="scrim" role="presentation" onclick={close}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="dialog" role="dialog" aria-modal="true" tabindex="-1" aria-label={ui("strip.databaseTitle")} onclick={(e) => e.stopPropagation()}>
+  <div class="dialog" role="dialog" aria-modal="true" tabindex="-1" aria-label={ui("settings.headline")} onclick={(e) => e.stopPropagation()}>
     <header>
-      <span class="eyebrow">{ui("settings.title")}</span>
-      <button class="close" onclick={close} aria-label={ui("settings.close")}>×</button>
+      <span class="eyebrow">{ui("settings.headline")}</span>
+      <button class="close" onclick={close} aria-label={ui("settings.close")}>
+        <X size={16} strokeWidth={1.9} />
+      </button>
     </header>
+
+    <div class="tabs" role="tablist" aria-label={ui("settings.sections")}>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tab === "database"}
+        class:on={tab === "database"}
+        onclick={() => show("database")}
+      >
+        {ui("settings.tabDatabase")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tab === "view"}
+        class:on={tab === "view"}
+        onclick={() => show("view")}
+      >
+        {ui("settings.tabView")}
+      </button>
+    </div>
+
+    <div class="body" class:hidden={tab !== "view"}>
+      <!--
+        Two languages, because they are two things. The interface is fully translated;
+        the database overlay is French as authored and partly English, and will never be
+        Polish — 541,061 requests is not a translation anyone finishes. Polish buttons
+        over a French database is the normal case, not a broken one.
+      -->
+      <label class="field">
+        <span class="eyebrow">{ui("view.interface")}</span>
+        <select
+          value={uiPreference()}
+          onchange={(event) => setUiPreference(event.currentTarget.value)}
+          title={ui("view.interfaceTitle")}
+        >
+          <option value="system">
+            {ui("view.interfaceSystemResolved", { language: systemLabel })}
+          </option>
+          {#each UI_LOCALES as locale (locale.tag)}
+            <option value={locale.tag}>{locale.label}</option>
+          {/each}
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="eyebrow">{ui("view.database")}</span>
+        <select
+          value={app.locale}
+          onchange={(event) => void setLocale(event.currentTarget.value)}
+          title={ui("view.databaseTitle")}
+        >
+          <option value="fr">{ui("view.databaseOriginal")}</option>
+          <option value="en">{ui("view.databaseEnglish")}</option>
+        </select>
+      </label>
+      <p class="note">{ui("view.databaseNote")}</p>
+
+      {#if app.locale !== VIEW_DEFAULTS.locale}
+        <label class="field check">
+          <input type="checkbox" bind:checked={app.showUntranslated} />
+          <span>{ui("view.markGaps")}</span>
+        </label>
+      {/if}
+
+      <label class="field">
+        <span class="eyebrow">{ui("view.zoom")}</span>
+        <select bind:value={app.zoom}>
+          <option value={"fit"}>{ui("view.zoomFit")}</option>
+          <option value={200}>200%</option>
+          <option value={150}>150%</option>
+          <option value={100}>{ui("view.zoomNative")}</option>
+          <option value={75}>75%</option>
+          <option value={50}>50%</option>
+        </select>
+      </label>
+
+      <label class="field check">
+        <input type="checkbox" bind:checked={app.inspect} />
+        <span>{ui("view.inspect")}</span>
+      </label>
+      <p class="note">{ui("view.inspectNote")}</p>
+    </div>
+
+    <div class="body" class:hidden={tab !== "database"}>
 
     <dl class="facts">
       <div>
@@ -194,6 +300,7 @@
       {/if}
     </div>
     {/if}
+    </div>
   </div>
 </div>
 
@@ -225,12 +332,103 @@
   }
 
   .close {
+    display: grid;
+    place-items: center;
     margin-left: auto;
-    padding: 0 6px;
+    padding: 2px;
     border: 0;
     background: none;
-    font-size: 20px;
-    line-height: 1;
+    color: var(--ink-faint);
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  /*
+    Sitting on the border with a negative margin, so the selected tab's white ground
+    joins the panel below it rather than floating above a line.
+  */
+  .tabs button {
+    margin-bottom: -1px;
+    padding: 5px 11px;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    background: none;
+    font-family: inherit;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+
+  .tabs button:hover {
+    color: var(--ink);
+  }
+
+  .tabs button.on {
+    background: var(--card);
+    border-color: var(--rule);
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .body {
+    padding: 14px 16px 16px;
+  }
+
+  /* Hidden rather than unmounted, so a half-typed URL survives a tab switch. */
+  .body.hidden {
+    display: none;
+  }
+
+  /* The view controls, moved out of the strip's popover onto a white ground. */
+  .field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--ink);
+  }
+
+  .field + .field,
+  .note + .field {
+    margin-top: 9px;
+  }
+
+  .field .eyebrow {
+    color: var(--ink-soft);
+  }
+
+  .field select {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 200px;
+    padding: 3px 5px;
+    border: 1px solid var(--rule);
+    border-radius: 0;
+    background: var(--card);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 11.5px;
+  }
+
+  .field input[type="checkbox"] {
+    accent-color: var(--blue);
+  }
+
+  /* Checkbox rows read left-to-right; select rows are label-then-value. */
+  .field.check {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .note {
+    margin: 6px 0 0;
+    font-size: 11px;
+    line-height: 1.45;
     color: var(--ink-faint);
   }
 
@@ -339,8 +537,14 @@
     font-size: 11px;
   }
 
-  /* The destructive corner, kept visually apart from the ordinary swaps above. */
+  /*
+    The destructive corner, kept visually apart from the ordinary swaps above. Negative
+    horizontal margins because it sits inside the tab body's padding now and this band
+    is meant to reach both edges — an inset one reads as another row rather than as the
+    floor of the panel.
+  */
   .danger {
+    margin: 16px -16px -16px;
     padding: 12px 16px 14px;
     border-top: 1px solid var(--rule);
     background: var(--paper);

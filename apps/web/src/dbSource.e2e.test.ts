@@ -108,7 +108,8 @@ describe.skipIf(!runnable)("choosing a database in a browser", () => {
       expect(await page.locator("section.install").count()).toBe(0);
 
       // ── settings describes what is stored ───────────────────────────────────
-      await page.getByRole("button", { name: /^Database$/ }).click();
+      // The `Database` button became a tab behind the cog.
+      await page.locator(".strip .cog").click();
       await page.waitForSelector(".dialog", { timeout: 10_000 });
       const facts = await page.locator(".dialog .facts").innerText();
       expect(facts).toContain("Stored in this browser");

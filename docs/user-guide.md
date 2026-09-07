@@ -37,7 +37,7 @@ be a zip, must contain `db.json`, and that file must parse. If it does not, you 
 list of what is wrong rather than a broken install — and your existing database is
 left untouched. Details in [`database-install.md`](database-install.md).
 
-To change or remove it later: **Database** in the toolbar.
+To change or remove it later: the **cog** in the toolbar, under *Database*.
 
 ## 2. Demo mode, and a real car
 
@@ -122,7 +122,7 @@ size is the database's, not ours.
 | --- | --- |
 | **Full screen** (toolbar, or `F`) | Drops the catalogue and screen list, giving the canvas their width — 532 px, or 240 px of height on a narrow window. `Esc` returns |
 | **Collapse** (the icon in the catalogue header) | Keeps the screen list, hides the catalogue |
-| **Zoom** (View ▾) | Percentages, or **Fit width** to shrink the whole canvas into the column |
+| **Zoom** (cog → View) | Percentages, or **Fit width** to shrink the whole canvas into the column |
 | Scrollbars | Both directions, always drawn, on the canvas itself |
 
 Full screen is remembered between visits, but only applies while a screen is open —
@@ -186,8 +186,8 @@ calculator is arithmetic and safe to use.
 
 ## 8. Language
 
-There are **two** language settings under **View ▾**, because they are two different
-things.
+There are **two** language settings under the **cog → View**, because they are two
+different things.
 
 **Interface** is ddtx's own buttons and dialogs. It follows your browser's language by
 default — a Polish browser opens in Polish — and you can override it. English and
@@ -240,7 +240,7 @@ against the bus trace: if the raw bytes are `FF`, the module is telling you it h
 nothing, not that the value is large.
 
 **A screen is blank or half-drawn.** Some widget captions are genuinely empty in the
-database — 1,421 of them — and are decoration, not breakage. **View ▾ → Inspect
+database — 1,421 of them — and are decoration, not breakage. **cog → View → Inspect
 layout** outlines every widget so you can see what is there.
 
 **The service light stays on after a reset.** Check the car actually has a maintenance

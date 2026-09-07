@@ -19,9 +19,6 @@
     "noWebSerialTitle": "Web Serial jest dostępne w Chrome i Edge na komputerze",
     "procedures": "Procedury",
     "proceduresTitle": "Procedury przeniesione z DDT4All",
-    "database": "Baza danych",
-    "databaseTitle": "Ustawienia bazy danych",
-    "databaseSource": "Baza danych: {{label}}",
     "readNow": "Odczytaj",
     "reading": "Odczyt…",
     "fullScreen": "Pełny ekran",
@@ -29,7 +26,9 @@
     "dock": "Przywróć układ",
     "dockTitle": "Przywróć układ (Esc)",
     "dismiss": "Zamknij",
-    "linkLabel": "Łącze"
+    "linkLabel": "Łącze",
+    "settings": "Ustawienia",
+    "settingsTitle": "Język, powiększenie, podgląd układu i źródło bazy danych"
   },
   "demo": {
     "fill": "Wartości",
@@ -42,8 +41,6 @@
     "drift": "Zmieniaj wartości między odczytami"
   },
   "view": {
-    "label": "Widok",
-    "title": "Język interfejsu, język bazy danych, powiększenie i podgląd układu",
     "interface": "Interfejs",
     "interfaceTitle": "Język przycisków i okien samego ddtx",
     "interfaceSystemResolved": "Zgodnie z przeglądarką — {{language}}",
@@ -179,7 +176,6 @@
     "adapterBusy": "Inna karta ddtx używa tego interfejsu."
   },
   "settings": {
-    "title": "Baza danych",
     "close": "Zamknij",
     "source": "Źródło",
     "sourceNone": "brak",
@@ -195,14 +191,14 @@
     "findingError": "problem",
     "replaceHead": "Zamień na inne archiwum",
     "installHead": "Zainstaluj z archiwum",
-    "installBody": "Rozpakowuje do tej przeglądarki. To samo archiwum zostanie rozpoznane i pominięte, a nie zapisane ponownie.",
+    "installBody": "Kopiowane do tej przeglądarki i czytane w miejscu, bez rozpakowywania. Wybranie tego samego archiwum ponownie po prostu kopiuje je jeszcze raz.",
     "chooseZip": "Wybierz ecu.zip",
     "verifyHead": "Sprawdź zainstalowaną bazę",
     "verifyBody": "Czyta indeks i próbkuje kilkanaście sterowników, zgłaszając wszystko, czego brakuje lub co jest uszkodzone. Ta sama kontrola działa przy instalacji.",
     "verify": "Sprawdź",
     "verifying": "Sprawdzanie…",
     "folderHead": "Czytaj z folderu",
-    "folderBody": "Już rozdzielone drzewo plików. Przy każdym odświeżeniu poprosi o uprawnienia.",
+    "folderBody": "Już rozdzielone drzewo plików, czytane bezpośrednio. Przy każdym odświeżeniu poprosi o uprawnienia.",
     "chooseFolder": "Wybierz folder",
     "urlHead": "Czytaj z adresu URL",
     "useUrl": "Użyj adresu",
@@ -213,7 +209,11 @@
     "verifyOk": "Sprawdzono: indeks oraz {{sampled}} próbkowanych sterowników, {{indexed}} zadeklarowanych. Nie znaleziono problemów.",
     "archiveSize": "Rozmiar archiwum",
     "ecusFound": "{{ecus}} sterowników, {{entries}} wpisów",
-    "copying": "Kopiowanie archiwum do tej przeglądarki…"
+    "copying": "Kopiowanie archiwum do tej przeglądarki…",
+    "headline": "Ustawienia",
+    "sections": "Sekcje ustawień",
+    "tabDatabase": "Baza danych",
+    "tabView": "Widok"
   },
   "install": {
     "eyebrow": "Baza danych",

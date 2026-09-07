@@ -15,10 +15,11 @@
   import Plugins from "./components/Plugins.svelte";
   import Popover from "./components/Popover.svelte";
   import About from "./components/About.svelte";
-  import { UI_LOCALES, setUiPreference, ui, uiLocale, uiPreference } from "./lib/ui.svelte.js";
+  import { ui } from "./lib/ui.svelte.js";
   import Settings from "./components/Settings.svelte";
   import Trace from "./components/Trace.svelte";
   // Lucide (ISC), imported per icon so the rest of the pack is tree-shaken away.
+  import Cog from "@lucide/svelte/icons/settings";
   import Maximize2 from "@lucide/svelte/icons/maximize-2";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import {
@@ -65,13 +66,23 @@
   });
 
   /**
-   * What "match my browser" currently resolves to, named in its own language.
+   * Is anything in settings in a state worth being reminded of?
    *
-   * An endonym — "Polski", not "Polish" — because that is what someone scanning a
-   * language list is looking for.
+   * Not simply "off its default". The interface language is deliberately excluded even
+   * though it is a preference with one: someone reading Polish has not left a setting
+   * in an odd state, and a dot permanently lit for them says nothing — which is the
+   * failure this indicator already had once.
+   *
+   * What is included is the states you can forget you are in: a zoom that is not
+   * native, the layout overlay, gap marking, and the database read through a
+   * translation overlay rather than as authored. The database *source* is not here
+   * either — there is no default source to be off.
    */
-  const systemLabel = $derived(
-    UI_LOCALES.find((locale) => locale.tag === uiLocale())?.label ?? uiLocale(),
+  const settingsMarked = $derived(
+    app.locale !== VIEW_DEFAULTS.locale ||
+      app.zoom !== VIEW_DEFAULTS.zoom ||
+      app.inspect !== VIEW_DEFAULTS.inspect ||
+      app.showUntranslated !== VIEW_DEFAULTS.showUntranslated,
   );
 
   /**
@@ -229,81 +240,6 @@
       </label>
     {/if}
 
-    <!--
-      Language, zoom and the layout overlay: set once, changed rarely, and together they
-      were 471px of permanent strip.
-    -->
-    <Popover
-      label={ui("view.label")}
-      title={ui("view.title")}
-      marked={uiPreference() !== "system" ||
-        app.locale !== VIEW_DEFAULTS.locale ||
-        app.zoom !== VIEW_DEFAULTS.zoom ||
-        app.inspect !== VIEW_DEFAULTS.inspect ||
-        app.showUntranslated !== VIEW_DEFAULTS.showUntranslated}
-    >
-      <!--
-        Two languages, because they are two things. This one is the app's own chrome and
-        is fully translated; the one below picks the database overlay, which is French as
-        authored and partly English, and will never be Polish — 541,061 requests is not a
-        translation anyone is going to finish. Polish buttons over a French database is
-        the normal case, not a broken one.
-      -->
-      <label class="field">
-        <span class="eyebrow">{ui("view.interface")}</span>
-        <select
-          value={uiPreference()}
-          onchange={(event) => setUiPreference(event.currentTarget.value)}
-          title={ui("view.interfaceTitle")}
-        >
-          <option value="system">
-            {ui("view.interfaceSystemResolved", { language: systemLabel })}
-          </option>
-          {#each UI_LOCALES as locale (locale.tag)}
-            <option value={locale.tag}>{locale.label}</option>
-          {/each}
-        </select>
-      </label>
-
-      <label class="field">
-        <span class="eyebrow">{ui("view.database")}</span>
-        <select
-          value={app.locale}
-          onchange={(event) => void setLocale(event.currentTarget.value)}
-          title={ui("view.databaseTitle")}
-        >
-          <option value="fr">{ui("view.databaseOriginal")}</option>
-          <option value="en">{ui("view.databaseEnglish")}</option>
-        </select>
-      </label>
-      <p class="note">{ui("view.databaseNote")}</p>
-
-      {#if app.locale !== "fr"}
-        <label class="field check">
-          <input type="checkbox" bind:checked={app.showUntranslated} />
-          <span>{ui("view.markGaps")}</span>
-        </label>
-      {/if}
-
-      <label class="field">
-        <span class="eyebrow">{ui("view.zoom")}</span>
-        <select bind:value={app.zoom}>
-          <option value={"fit"}>{ui("view.zoomFit")}</option>
-          <option value={200}>200%</option>
-          <option value={150}>150%</option>
-          <option value={100}>{ui("view.zoomNative")}</option>
-          <option value={75}>75%</option>
-          <option value={50}>50%</option>
-        </select>
-      </label>
-
-      <label class="field check">
-        <input type="checkbox" bind:checked={app.inspect} />
-        <span>{ui("view.inspect")}</span>
-      </label>
-      <p class="note">{ui("view.inspectNote")}</p>
-    </Popover>
-
     <label class="control check">
       <input
         type="checkbox"
@@ -352,14 +288,21 @@
       </button>
     {/if}
 
+    <!--
+      One cog for everything that is a setting. It replaces a `View` popover and a
+      `Database` button — 158px of strip between them — because both answered the same
+      kind of question and neither is touched during a job. The dot is the popover's
+      convention kept: something in here is off its default, so it is worth opening.
+    -->
     <button
-      class="settings"
+      class="cog"
       onclick={() => setSettingsOpen(true)}
-      title={app.dbSource === null
-        ? ui("strip.databaseTitle")
-        : ui("strip.databaseSource", { label: app.dbSource.label })}
+      title={ui("strip.settingsTitle")}
+      aria-label={ui("strip.settings")}
+      aria-haspopup="dialog"
     >
-      {ui("strip.database")}
+      <Cog size={15} strokeWidth={1.9} />
+      {#if settingsMarked}<span class="dot" aria-hidden="true"></span>{/if}
     </button>
 
     <button class="read" onclick={() => void refresh()} disabled={app.screen === null || app.refreshing}>
@@ -403,7 +346,9 @@
         <div class="notice error">
           <h2>{ui("stage.dbUnreadable")}</h2>
           <p>{app.error}</p>
-          <button onclick={() => setSettingsOpen(true)}>{ui("stage.changeSource")}</button>
+          <button onclick={() => setSettingsOpen(true, "database")}>
+            {ui("stage.changeSource")}
+          </button>
         </div>
       {:else if app.screen !== null}
         <div class="scroller">
@@ -853,6 +798,33 @@
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.04em;
+  }
+
+  /* Icon-only, like the expand control, and carrying the popover's dot convention. */
+  .cog {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 22px;
+    padding: 0;
+    background: none;
+    border: 0;
+    color: #fff;
+  }
+
+  .cog:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  .cog .dot {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
   }
 
   /*
