@@ -14,6 +14,7 @@ byte on a real car is not recoverable by reverting a commit.
 pnpm typecheck      # NOT `npx svelte-check` — see below
 pnpm test
 pnpm i18n:check     # if you touched any user-facing string
+pnpm docs:check     # if you touched a heading or a link
 ```
 
 `pnpm typecheck` is two things: `turbo run typecheck` (13 packages, via `tsc`) **and**
@@ -105,7 +106,7 @@ reads goes through `ui()`, including strings built in `state.svelte.ts`.
 - **GPL-3.0-or-later**, because DDT4All is. It therefore **cannot depend on** the
   `@emdzej/bimmerz-*` or `@emdzej/ediabasx-*` packages while they are PolyForm
   Noncommercial — copy and adapt, never import. See
-  [`docs/plan.md`](docs/plan.md#licensing-constraint).
+  [`docs/plan.md`](docs/plan.md#51-licensing-constraint).
 - **The ECU database is not ours and is not committed.** `data/` is git-ignored. Never
   add a fixture derived from it, and never paste a VIN into a commit, test, or doc.
 - **Release tags carry no `v` prefix.** `0.2.0`, not `v0.2.0` — the strip's version link

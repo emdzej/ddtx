@@ -5,7 +5,8 @@ Browser-based Renault/Dacia/Nissan ECU diagnostics — a TypeScript port of
 against an ELM327-family adapter over Web Serial.
 
 **Live at [ddtx.emdzej.pl](https://ddtx.emdzej.pl/)** — it ships without the database,
-so bring your own `ecu.zip` and it unpacks into the browser.
+so bring your own `ecu.zip`. It is stored in the browser once and then read in place,
+never unpacked.
 
 > **No warranty. Use at your own risk.** This software talks to real vehicle control
 > units, and writing to one can be irreversible. It is provided **as is**, and the
@@ -58,6 +59,13 @@ The interface itself is translated separately from the database, in
 `apps/web/src/i18n/locales/*.json` via i18next — English and Polish, defaulting to the
 browser's language. The two are different problems and stay two settings; see
 [the guide](docs/user-guide.md#8-language).
+
+**Reimplementing it?** [`docs/ecu-format.md`](docs/ecu-format.md) is the reference for
+the database — every field measured over all 1,580 ECUs, the decode and encode
+algorithm step by step, and the quirks you have to copy rather than improve.
+[`docs/protocols.md`](docs/protocols.md) is what goes on the wire. Neither exists
+upstream. `pnpm golden` regenerates 508,066 vectors from the original Python, which is
+the specification the prose only describes.
 
 Changing it: [`AGENTS.md`](AGENTS.md) collects the conventions — which check to run,
 why the two translation systems must not be mixed, and an honest list of what is not
@@ -209,7 +217,7 @@ The upstream DDT4All is **GPL-3.0-or-later**, and this is a derivative work, so
 ddtx is GPL-3.0-or-later too. That has a consequence worth knowing up front:
 ddtx **cannot depend on the `@emdzej/bimmerz-*` or `@emdzej/ediabasx-*`
 packages** while they are licensed PolyForm Noncommercial — see
-[`docs/plan.md`](docs/plan.md#licensing-constraint). Code is copied and adapted
+[`docs/plan.md`](docs/plan.md#51-licensing-constraint). Code is copied and adapted
 rather than imported, deliberately.
 
 The ECU database is not ours and is not distributed here.

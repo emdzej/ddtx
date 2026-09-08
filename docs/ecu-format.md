@@ -23,8 +23,21 @@ ecu.zip                          104.6 MB compressed, 1.278 GB expanded
 ```
 
 `tools/db-split` turns this into `index.json` + `ecu/<slug>.json` +
-`layout/<slug>.json`, byte-identical to the entries. A slug is the entry name
-minus `.json`.
+`layout/<slug>.json`. A slug is the entry name minus `.json`.
+
+**File *contents* are byte-identical to the zip entries; the paths are not.** The
+archive is flat and the tree is nested, so `db-split` maps between them:
+
+| tree | archive |
+| ---- | ------- |
+| `ecu/<slug>.json` | `<slug>.json` |
+| `layout/<slug>.json` | `<slug>.json.layout` |
+| `index.json` | derived from `db.json` — see §2 |
+
+Worth stating plainly because "byte-identical" invites the assumption that a path is
+too, and the `.json.layout` → `layout/*.json` rewrite is the one that catches you.
+ddtx reads the archive in place through that same mapping rather than unpacking it;
+`database-install.md` covers how.
 
 Definitions and layouts are separate files, and that split is load-bearing: the
 codec needs only the definition, and a layout is fetched only when a screen is
@@ -226,6 +239,68 @@ original. Neither the Python nor this port does anything with it.
 139,199 devices. `dtctype` is `0` (99,587), `4` (23,264), `2` (8,705), `3` (7,643).
 `devicedata` maps a failure-flag name to `"0"` or `"1"` — the flag's expected
 value, not a reading.
+
+---
+
+### 3.6 Decoding a value, step by step
+
+The fields above say where a value lives; this is the order they are applied in. It
+matters more than it looks, because several of the steps are quirks rather than
+choices, and a reimplementation that is merely *sensible* will disagree with the
+original on real data.
+
+**Extract the bits** — `getHexValue`:
+
+1. Strip spaces from the response. **Any single non-hex character voids the entire
+   response, not just its tail** — an ELM327 answering `NO DATA` yields no value for
+   every field in the frame rather than three garbage ones.
+2. `bitscount <= 0` → no value. (The original raises `ValueError` from `int("0b", 2)`.)
+3. `databytelen = ceil(bitscount / 8)`, `reqdatabytelen = ceil((bitscount + bitoffset) / 8)`.
+4. Start at byte `firstbyte - 1`. **1-based, and byte 1 is the response SID** (§3.4).
+5. If `firstbyte - 1 + databytelen` runs past the response, no value.
+6. Expand bytes `[sb, sb + reqdatabytelen)` to a bit string, MSB first.
+7. **Big endian:** take bits `[bitoffset, bitoffset + bitscount)`.
+8. **Little endian:** *not* a byte reversal. The original reassembles in three parts —
+   the tail of the first byte, then whole middle bytes, then the head of the last —
+   and its own comment says "Little endian coding is really weird :/ … tried to do my
+   best to mimic the read/write process". Mimicking it is the specification.
+9. Render lowercase hex, left-padded to `databytelen * 2`.
+
+All slicing is **Python slice semantics**: out-of-range indices clamp instead of
+throwing, and several steps above rely on that rather than checking first.
+
+**Present it** — `getDisplayValue`, in this order:
+
+| Condition | Result |
+| --------- | ------ |
+| `bytesascii` | The bytes decoded as UTF-8, lenient about invalid sequences |
+| not `scaled`, and the value hits `lists` | The enum label |
+| not `scaled`, and it does not | **Lowercase hex** — not a decimal, not an error |
+| `divideby == 0` | No value. The original prints "Division by zero" |
+| `scaled` | `(raw × step + offset) ÷ divideby`, then formatted below |
+
+So **only the `scaled` path yields a number**. A caller that assumes one gets a
+surprise from three of the five rows.
+
+Formatting the scaled result:
+
+1. `signed` is honoured for `bytescount` 1 and 2 **only**; wider signed fields are
+   silently unsigned (the original warns and carries on).
+2. `format` containing a `.` → that many decimals, using **Python's `%.Nf`**, which
+   disagrees with most languages' round-half-to-even at exact halfway values — and
+   power-of-two `step` sizes produce those constantly.
+3. Non-finite → no value.
+4. Exact integer, tested by **truncation** → integer string.
+5. Otherwise Python's `repr` for floats.
+
+Steps 2, 4 and 5 are why `packages/codec/src/python.ts` exists: they are Python's
+number formatting, not the host language's, and the differences are visible on
+ordinary readings rather than at the edges.
+
+**Conformance.** `tools/golden` generates **508,066 vectors** by running the real
+Python over the real database, and `packages/codec/src/golden.test.ts` diffs against
+them. Anyone reimplementing this should generate the same vectors and diff — the
+prose above is a description, and the vectors are the specification.
 
 ---
 

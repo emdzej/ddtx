@@ -5,9 +5,9 @@ rest are for changing it.
 
 |                                                |                                                                                                                                                                                      |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [**user-guide.md**](user-guide.md)             | Operating it on a car. Getting the database in, demo mode versus a live vehicle, the sweep, reading screens, fault codes, the write gates, and what an absurd-looking value usually means                |
+| [**user-guide.md**](user-guide.md)             | Operating it on a car. What hardware works (and which adapters cannot), getting the database in, demo mode versus a live vehicle, the sweep, reading screens, fault codes, the write gates, and what an absurd-looking value usually means |
 | [**architecture.md**](architecture.md)         | How it works. Follows one value from the database to the screen and one click from the screen to the bus, which covers most of the system. Start here                                |
-| [**ecu-format.md**](ecu-format.md)             | Reference for the ECU database format — every field, measured over all 1,580 ECUs, with the quirks and the outright data faults. No such reference exists upstream                   |
+| [**ecu-format.md**](ecu-format.md)             | Reference for the ECU database format — every field, measured over all 1,580 ECUs, the decode and encode algorithm step by step, the quirks and the outright data faults. No such reference exists upstream. **This is the document to reimplement from** |
 | [**protocols.md**](protocols.md)               | What goes on the wire: ISO-TP framing, the AT sequences and why each command is there, K-line init modes, fault reads, and what a browser cannot reach                               |
 | [**plan.md**](plan.md)                         | Why the port is shaped this way. Feasibility analysis, measured database survey, the reuse audit and its licensing conclusion, ranked risks, roadmap                                 |
 | [**database-install.md**](database-install.md) | How the ECU database gets into the browser: `ecu.zip` read in place rather than unpacked, the three csfs backends behind one `read(path)`, and what is persisted where                     |
@@ -73,7 +73,7 @@ latency cannot be controlled from a web page.
 with an sd of 0.2 and no stalls, so no latency floor and no Chrome penalty. `cfc0`
 is viable; `manual` remains the default because the adapter answers flow control
 without a host round trip at all. Numbers and caveats in
-[`protocols.md`](protocols.md#24-flow-control-the-open-question).
+[`protocols.md`](protocols.md#24-flow-control).
 
 What still needs a vehicle: real ECU response timing, and whether the adapter's own
 `CFC1` holds on a live bus — the only thing that would make the `cfc0` fallback

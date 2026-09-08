@@ -51,6 +51,13 @@ jobs:
         # regression is obvious in the checks list rather than buried in bundler output.
         run: node tools/check-plugin-imports.mjs
 
+      - name: Check documentation links
+        # Headings get renumbered and reworded; the links pointing at them do not
+        # follow. Three had gone stale by the time this was added, one of them to a
+        # heading that lost the words "the open question" when the question was
+        # answered. Cheap enough to run on every push.
+        run: node tools/docs/check-links.mjs
+
       - name: Validate translations
         # Its own step so a translation problem is a named line in the checks list
         # rather than something to find inside a test summary. Errors here — a missing

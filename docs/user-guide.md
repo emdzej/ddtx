@@ -18,26 +18,39 @@ the database lives in your browser and the adapter talks straight to the page.
 
 ## 1. First run: get the database in
 
-ddtx ships without ECU definitions. They are 1,580 ECUs and 1.19 GB unpacked, and they
-are not ours to redistribute, so the first screen asks for them.
+ddtx ships without ECU definitions — 1,580 of them, and not ours to redistribute — so
+the first screen asks for them. You need `ecu.zip` from a DDT4All installation.
 
-**Choose `ecu.zip`** — the recommended path, and the only one that never asks again.
-The archive is unpacked into the browser's private storage, which takes about fifteen
-seconds. Reload and it is simply there.
+**Choose `ecu.zip`, or drag it onto the window.** It is copied into the browser's own
+storage — about 104 MB, a second or two — and **read where it lies** from then on.
+Nothing is unpacked. Reload and it is simply there, with no prompt.
 
-Two other routes sit behind *I already have a split tree*:
+That is the recommended path and the only one that never asks again. Two others sit
+behind *I already have a split tree*:
 
 | | |
 | --- | --- |
-| **A folder on disk** | A tree produced by `db-split`. Nothing is copied, but the browser drops file permission on every reload, so you re-grant it each time. Chromium-based browsers only |
-| **A URL** | A static host serving the tree, or this project's dev server |
+| **A folder on disk** | A tree produced by `db-split`, read directly. Nothing is copied, but browsers drop file permission on every reload, so it needs one click each time. Chromium-based browsers only |
+| **A URL** | A static host serving the tree, or this project's dev server. The host must honour `Range` requests and the tree must carry the `csfs-manifest.json` that `db-split` writes |
 
-Whatever you pick is checked before anything is installed: the archive must actually
-be a zip, must contain `db.json`, and that file must parse. If it does not, you get a
-list of what is wrong rather than a broken install — and your existing database is
-left untouched. Details in [`database-install.md`](database-install.md).
+Whatever you pick is opened **before** anything already installed is touched, so a
+wrong file cannot leave you with no database. If it is not one, you are told which
+part is wrong — not a zip, no `db.json`, a `db.json` that does not parse, or an index
+describing nothing the archive holds.
 
-To change or remove it later: the **cog** in the toolbar, under *Database*.
+To change or remove it later: the **cog** in the toolbar, under *Database*. That panel
+also shows what is installed and can re-check it.
+
+### Where it all lives
+
+| | |
+| --- | --- |
+| The archive | The browser's private filesystem, under a `ddtx` namespace |
+| Which source you chose, and any URL | `localStorage` |
+| A picked folder's handle | IndexedDB — `localStorage` cannot hold one |
+
+None of it is uploaded anywhere, and *Remove the database* under the cog clears all
+three. Mechanics in [`database-install.md`](database-install.md).
 
 ## 2. Demo mode, and a real car
 
@@ -56,16 +69,47 @@ The **Demo** badge opens what those values are made of:
 **Vary values between reads** makes *Read now* return something different each time, so
 you can tell a live-looking screen from a frozen one.
 
+### What you need
+
+| | |
+| --- | --- |
+| **Browser** | Chrome or Edge on the desktop. Web Serial exists nowhere else, so on Firefox or Safari the connect button does not appear at all |
+| **Adapter** | An ELM327 that appears as a **serial port** — a USB one, or a Bluetooth one paired as a COM port on Windows |
+| **Database** | `ecu.zip`, as above |
+
+**A WiFi ELM327 cannot work here, and neither can a Bluetooth LE one.** This is not a
+missing feature. A WiFi adapter speaks raw TCP on port 35000 and no browser API opens
+a TCP socket; classic Bluetooth uses SPP, and Web Bluetooth exposes only BLE. If your
+adapter has no cable, nothing in this app will reach it.
+[`protocols.md` §6](protocols.md#6-what-cannot-be-reached-from-a-browser) lists what is
+out of reach and why.
+
+Cheap clones work — the vehicle testing was done on a generic v1.5 clone on a Prolific
+PL2303 bridge — but they misbehave in specific ways the driver already works around,
+such as silently resetting `AT S0` and `AT CAF0` after a protocol change.
+
 ### Connecting
 
-**Connect vehicle** asks the browser for the serial port your ELM327 is on. This needs
-Web Serial, so **Chrome or Edge** — Firefox and Safari have no such API and the button
-will not appear.
+**Connect vehicle** asks the browser for the serial port your adapter is on. Pick it
+from the list the browser shows; the choice is remembered for the site, not by us.
+
+The baud rate is found by trying: **38400, 115200, 230400, 57600, 9600, 500000,
+1000000, 2000000**, in that order, stopping at the first that answers. 38400 is first
+because it is what almost every clone ships at. If none answer you get *"No ELM327
+answered on that port at any baud rate"*, which usually means the wrong port rather
+than a dead adapter.
 
 Once connected the toolbar turns **red** and the badge reads `LIVE`. That colour is the
 only thing you need to check before doing anything: red means a real car is on the
-other end. **Measure link** reports the round-trip time to the adapter if you want to
-know the link is healthy.
+other end. **Measure link** reports the round-trip time to the adapter — useful to know
+the link is healthy before blaming the car for a slow read.
+
+### Before you turn the key
+
+Ignition on, engine off is enough for most reads and is the safest state to start in.
+Some modules only answer with the ignition live, and a few measurements only mean
+anything with the engine running — but nothing in this app needs the car moving, and
+reading while driving is a bad idea for reasons that have nothing to do with software.
 
 ## 3. Finding the module
 
